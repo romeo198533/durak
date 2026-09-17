@@ -5,6 +5,7 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.Gravity;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -14,12 +15,16 @@ import java.time.LocalDateTime;
 /**
  * Главный экран: дата с часами сверху, две крупные двери внизу.
  *
+ * Дата с часами занимает всю полосу до кнопок, а не прижимается к верхнему краю:
+ * пустого места между ней и кнопками не остаётся, и попасть по надписи слепой
+ * рукой легче — промахнуться мимо неё попросту некуда.
+ *
  * Слева «Начать игру», справа «Настройки» — как в остальных приложениях на
  * этом телефоне, чтобы рука искала кнопку там же, где привыкла. Кнопки здесь
  * крупнее обычных: на главном экране спешат, и промахнуться по ним нельзя.
  *
- * Часы сверху тикают, но вслух сами не говорят: время видно и слышно по
- * касанию, а говорящие сами по себе часы перебивали бы игру.
+ * Часы тикают, но вслух сами не говорят: время слышно по касанию, а говорящие
+ * сами по себе часы перебивали бы игру.
  */
 public class MainActivity extends Activity {
 
@@ -43,11 +48,14 @@ public class MainActivity extends Activity {
         LinearLayout root = Skin.column(this);
         root.setPadding(Skin.dp(this, 8), Skin.dp(this, 8), Skin.dp(this, 8), Skin.dp(this, 24));
 
-        clock = Skin.text(this, "", 26);
-        clock.setPadding(0, Skin.dp(this, 20), 0, Skin.dp(this, 20));
-        root.addView(clock, Skin.wide());
-
-        root.addView(Skin.spacer(this, 1f));
+        clock = Skin.text(this, "", 34);
+        clock.setGravity(Gravity.CENTER);
+        clock.setPadding(Skin.dp(this, 8), Skin.dp(this, 8),
+                Skin.dp(this, 8), Skin.dp(this, 8));
+        // Вес, а не высота по содержимому: дата тянется до самых кнопок, и
+        // пустой полосы под ней не остаётся.
+        root.addView(clock, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
 
         LinearLayout buttons = Skin.row(this);
 

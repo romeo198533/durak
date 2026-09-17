@@ -4,10 +4,9 @@ import android.app.Activity;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.view.View;
 import android.widget.Button;
+import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
-import android.widget.ScrollView;
 import android.widget.TextView;
 
 import java.util.List;
@@ -16,14 +15,18 @@ import java.util.List;
  * Игровой стол.
  *
  * Раскладка повторяет настоящий стол, каким его нащупывают рукой: в самом низу —
- * свои карты, в самом верху — соперник, посередине колода с козырем, а по бокам
+ * свои карты, в самом верху — соперник, а посередине колода с козырем и по бокам
  * от неё «Начать заново» и «Сдаться». Над колодой две крупные кнопки — «Беру» и
  * «Бито»: обе на виду весь круг, потому что искать их в решительный момент
  * некогда, а «Бито» до поры объясняет, чего ещё не хватает.
  *
- * Карты списком в две колонки, а не одной полосой внизу: за круг рука доходит до
- * двенадцати карт, и в полосу они не влезут. Две колонки читаются диктором в том
- * же порядке, в каком лежат, и вдвое короче.
+ * Между соперником и кнопками и между кнопками и своими картами стоят распорки
+ * одинакового веса: кнопки встают на середину экрана, свои карты — на самый низ.
+ * Без распорок всё липнет к верхнему краю, а внизу остаётся пустая полоса.
+ *
+ * Свои карты идут одной полосой слева направо, как их и держат в руке. Полоса
+ * длиннее экрана — она прокручивается вбок, и диктор сам подводит её к той
+ * карте, до которой дошёл.
  */
 public class GameActivity extends Activity {
 
@@ -46,7 +49,8 @@ public class GameActivity extends Activity {
     /** Козырь словами: колода кончится, а козырь останется. */
     private String trumpName = "";
 
-    private Button foeButton;
+    /** Панель соперника и надпись стола: обе — просто надписи, не кнопки. */
+    private TextView foeButton;
     private TextView tableText;
     private Button takeButton;
     private Button passButton;
@@ -102,13 +106,21 @@ public class GameActivity extends Activity {
         LinearLayout root = Skin.column(this);
         root.setPadding(Skin.dp(this, 8), Skin.dp(this, 8), Skin.dp(this, 8), Skin.dp(this, 8));
 
-        foeButton = Skin.button(this, "", 18);
-        foeButton.setOnClickListener(view -> sayFoe());
+        // Панель соперника — надпись, а не кнопка: она ничего не делает, а
+        // кнопка добавляла бы к счёту «кнопка, двойное нажатие для активации».
+        // По касанию диктор читает её как есть: «соперник, шесть карт».
+        foeButton = Skin.text(this, "", 18);
+        foeButton.setFocusable(true);
+        foeButton.setBackgroundColor(Palette.color(Prefs.cardColor(this)));
+        foeButton.setPadding(Skin.dp(this, 4), Skin.dp(this, 12),
+                Skin.dp(this, 4), Skin.dp(this, 12));
         root.addView(foeButton, spaced());
 
+        root.addView(Skin.spacer(this, 1f));
+
+        // Стол — обычная надпись, а не кнопка: при касании диктор читает её как
+        // есть, и подсказки «нажми, чтобы услышать ещё раз» к ней не нужно.
         tableText = Skin.text(this, "", 17);
-        tableText.setClickable(true);
-        tableText.setOnClickListener(view -> voice.say("На столе: " + tableText()));
         root.addView(tableText, Skin.wide());
 
         LinearLayout decisions = Skin.row(this);
@@ -138,13 +150,13 @@ public class GameActivity extends Activity {
 
         root.addView(middle, spaced());
 
-        ScrollView scroll = new ScrollView(this);
+        root.addView(Skin.spacer(this, 1f));
+
+        HorizontalScrollView scroll = new HorizontalScrollView(this);
         scroll.setFillViewport(false);
         handBox = Skin.row(this);
-        handBox.setOrientation(LinearLayout.VERTICAL);
-        scroll.addView(handBox, Skin.wide());
-        root.addView(scroll, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
+        scroll.addView(handBox);
+        root.addView(scroll, Skin.wide());
 
         setContentView(root);
     }
@@ -201,7 +213,14 @@ public class GameActivity extends Activity {
         return game.attacker() == FOE;
     }
 
-    /** Одно движение соперника. */
+    /**
+     * Одно движение соперника.
+     *
+     * Вслух называется только карта — «соперник, семь пик», — и то, чем круг
+     * кончился: взял он или сказал «бито». Слова про ход и про бой отсюда убраны:
+     * чем он бил, слышно в самой карте, а чем всё кончилось, иначе пропустишь —
+     * карты уходят со стола молча.
+     */
     private void stepFoe() {
         if (game.isOver()) return;
 
@@ -212,7 +231,7 @@ public class GameActivity extends Activity {
                 announce("Соперник берёт.");
             } else {
                 game.defend(card);
-                announce("Соперник бьёт: " + card.name() + ".");
+                announce("Соперник, " + card.name() + ".");
             }
             return;
         }
@@ -221,12 +240,12 @@ public class GameActivity extends Activity {
             Card card = bot.attack(game);
             if (card == null && game.canPass()) {
                 game.pass();
-                announce("Соперник говорит: бито.");
+                announce("Соперник: бито.");
                 return;
             }
             if (card != null) {
                 game.attack(card);
-                announce("Соперник ходит: " + card.name() + ".");
+                announce("Соперник, " + card.name() + ".");
             }
         }
     }
@@ -332,10 +351,6 @@ public class GameActivity extends Activity {
 
     // ----- что говорят кнопки -----
 
-    private void sayFoe() {
-        voice.say("У соперника " + Cards.count(game.handCount(FOE)) + ".");
-    }
-
     private void sayDeck() {
         String cards = game.deckCount() == 0
                 ? "Колода пуста."
@@ -343,15 +358,22 @@ public class GameActivity extends Activity {
         voice.say(cards + " Козырь — " + trumpName + ".");
     }
 
-    /** Стол словами: чем зашли и отбито ли. */
+    /**
+     * Стол словами: чем зашли и чем отбито.
+     *
+     * Пара читается как одно: «шесть пик бито семь пик» — зашли шестёркой, бито
+     * семёркой. Назвать одно лишь «бито» мало: тогда слышно, с чего сам пошёл,
+     * и не слышно, чем тебя накрыли.
+     */
     private String tableText() {
         List<Game.Slot> slots = game.table();
-        if (slots.isEmpty()) return "Пусто";
+        if (slots.isEmpty()) return "На столе пусто";
         StringBuilder out = new StringBuilder();
         for (Game.Slot slot : slots) {
-            if (out.length() > 0) out.append("; ");
+            if (out.length() > 0) out.append(", ");
             out.append(slot.attack.name());
-            out.append(slot.beaten() ? " — бита" : " — не бита");
+            out.append(slot.beaten() ? " бито " : " не бита");
+            if (slot.beaten()) out.append(slot.defend.name());
         }
         return out.toString();
     }
@@ -366,36 +388,42 @@ public class GameActivity extends Activity {
      * фразу о ходе соперника ровно посередине.
      */
     private void refresh() {
-        String foe = Cards.count(game.handCount(FOE));
-        label(foeButton, "Соперник: " + foe,
-                "Соперник, у него " + foe + ". Нажми, чтобы услышать ещё раз");
         int foeSize = Prefs.FOE_SIZE_SP[Prefs.foeSize(this)];
         if (foeSize != foeSizeShown) {
             foeSizeShown = foeSize;
             foeButton.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, foeSize);
         }
 
-        label(tableText, "На столе: " + tableText(),
-                "На столе: " + tableText() + ". Нажми, чтобы услышать ещё раз");
+        // Надписи без описаний: диктор читает ровно то, что написано. Описания
+        // остаются там, где на экране написано короче, чем нужно на слух, —
+        // у колоды, у «Бито» и у карт.
+        plain(foeButton, "Соперник, " + Cards.count(game.handCount(FOE)));
+        plain(tableText, tableText());
+        plain(deckButton,
+                game.deckCount() == 0 ? "Колода\nпуста" : "Колода\n" + Cards.count(game.deckCount()));
 
-        label(deckButton,
-                game.deckCount() == 0 ? "Колода\nпуста" : "Колода\n" + Cards.count(game.deckCount()),
-                "Колода. В ней " + Cards.count(game.deckCount())
-                        + ", козырь — " + trumpName + ". Нажми, чтобы услышать");
+        describe(deckButton, "Колода. В ней " + Cards.count(game.deckCount())
+                + ", козырь — " + trumpName);
 
         // Обе кнопки всегда на виду и всегда нажимаются: «Бито» вместо запрета
         // объясняет словами, чего ещё не хватает, — выключенная кнопка диктору
         // не видна вовсе, и слепой просто не понял бы, куда она делась.
         describe(passButton, game.canPass()
-                ? "Бито. Нажми, чтобы закончить круг"
+                ? "Бито"
                 : "Бито. Пока нельзя: на столе есть неотбитая карта");
 
         showHand();
     }
 
-    private void label(TextView view, CharSequence text, CharSequence spoken) {
+    /**
+     * Надпись без описания: диктор читает ровно то, что написано.
+     *
+     * Описания у таких надписей нет вовсе, поэтому здесь только текст — трогать
+     * описание на каждом ходу значило бы дёргать его вхолостую и заставлять
+     * диктора перечитывать кнопку, на которой он стоит.
+     */
+    private void plain(TextView view, CharSequence text) {
         if (!text.equals(view.getText())) view.setText(text);
-        describe(view, spoken);
     }
 
     private void describe(TextView view, CharSequence spoken) {
@@ -405,10 +433,14 @@ public class GameActivity extends Activity {
     }
 
     /**
-     * Свои карты внизу, в две колонки по убыванию читаемости.
+     * Свои карты внизу, одной полосой слева направо.
      *
-     * Порядок тот же, что у диктора: слева направо, сверху вниз. Козыри — в
-     * конце списка, их ищут отдельно и находят сразу.
+     * Порядок тот же, что у диктора: как идут, так и читаются. Козыри — в конце
+     * списка, их ищут отдельно и находят сразу.
+     *
+     * Ширина карты считается от кегля, а не берётся от веса: внутри полосы,
+     * которая шире экрана, вес делить не от чего. Двузначное достоинство при
+     * самом крупном кегле должно оставаться целым.
      */
     private void showHand() {
         List<Card> cards = game.handSorted(HUMAN);
@@ -416,7 +448,7 @@ public class GameActivity extends Activity {
 
         // Пересобираем, только если карты и правда изменились. Иначе диктор
         // после каждого хода соперника терял бы карту, на которой стоял, и
-        // возвращался бы в начало экрана — а на карту ещё нужно попасть.
+        // возвращался бы в начало полосы — а на карту ещё нужно попасть.
         // Цвета тоже в ключе: их меняют в настройках, и вернувшись за стол,
         // карты должны быть уже перекрашены.
         String key = sp + "|" + Prefs.cardColor(this) + "|" + Prefs.suitColor(this)
@@ -427,29 +459,27 @@ public class GameActivity extends Activity {
         handBox.removeAllViews();
 
         if (cards.isEmpty()) {
-            handBox.addView(Skin.text(this, "Карт нет", sp), Skin.wide());
+            handBox.addView(Skin.text(this, "Карт нет", sp), wrap());
             return;
         }
 
-        for (int i = 0; i < cards.size(); i += 2) {
-            LinearLayout row = Skin.row(this);
-            for (int j = i; j < i + 2 && j < cards.size(); j++) {
-                final Card card = cards.get(j);
-                Button button = Skin.card(this, card, sp, game.trump());
-                button.setOnClickListener(view -> tapCard(card));
-                LinearLayout.LayoutParams params = Skin.weight(1f);
-                params.setMargins(Skin.dp(this, 2), Skin.dp(this, 2),
-                        Skin.dp(this, 2), Skin.dp(this, 2));
-                row.addView(button, params);
-            }
-            // Одной карте во всю ширину делать нечего: пусть стоит на своём
-            // месте, иначе рука ищет её там, где её нет.
-            if (cards.size() - i == 1) {
-                View gap = new View(this);
-                row.addView(gap, Skin.weight(1f));
-            }
-            handBox.addView(row, Skin.wide());
+        int width = Skin.dp(this, Math.max(Skin.TOUCH_DP, Math.round(sp * 1.6f)));
+        for (Card card : cards) {
+            Button button = Skin.card(this, card, sp, game.trump());
+            button.setOnClickListener(view -> tapCard(card));
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                    width, LinearLayout.LayoutParams.WRAP_CONTENT);
+            params.setMargins(Skin.dp(this, 2), Skin.dp(this, 2),
+                    Skin.dp(this, 2), Skin.dp(this, 2));
+            handBox.addView(button, params);
         }
+    }
+
+    /** Размер по содержимому: для полосы, которая сама шире экрана. */
+    private LinearLayout.LayoutParams wrap() {
+        return new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT);
     }
 
     // ----- конец и начало -----
