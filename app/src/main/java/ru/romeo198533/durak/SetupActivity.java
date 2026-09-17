@@ -16,6 +16,9 @@ import android.widget.LinearLayout;
  *
  * «Раздать» отдельной кнопкой внизу: выбор правил — это ещё не игра, и
  * случайное касание не должно начинать партию.
+ *
+ * Рядом с ней «Играть вдвоём»: правила у партии по проводу те же, и выбранное
+ * здесь уедет на стол точно так же — разница только в том, кто сядет напротив.
  */
 public class SetupActivity extends Activity {
 
@@ -51,6 +54,14 @@ public class SetupActivity extends Activity {
         Button deal = Skin.button(this, "Раздать", "Раздать карты и начать партию", 24);
         deal.setOnClickListener(view -> deal());
         root.addView(deal, spaced());
+
+        // Игра вдвоём стоит отдельной дверью, а не галочкой в правилах: это не
+        // правило, а другой стол — за ним сидит живой человек, и колоду держит
+        // телефон того, кто стол открыл.
+        Button net = Skin.button(this, "Играть вдвоём", "Играть вдвоём по Блютусу: "
+                + "создать стол или подключиться к чужому", 22);
+        net.setOnClickListener(view -> startActivity(new Intent(this, NetActivity.class)));
+        root.addView(net, spaced());
 
         setContentView(root);
     }

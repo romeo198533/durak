@@ -14,7 +14,8 @@ import java.util.List;
  * род сообщения:
  *
  *   V;me=0;seats=2;round=3;trump=2;trumpCard=2-14;deck=18;hands=5,6;
- *     table=2-7:0-9,1-6:-;hand=0-6,3-13;attacker=1;defender=0;phase=0;loser=-1;draw=0
+ *     table=2-7:0-9,1-6:-;hand=0-6,3-13;attacker=1;defender=0;phase=0;loser=-1;draw=0;
+ *     last=1:0:0-9
  *   M;do=hit;card=0-7
  *   R;ok=0;why=Сейчас не твой ход.
  *
@@ -102,6 +103,7 @@ public final class Wire {
         field(out, "phase", seat.phase);
         field(out, "loser", seat.loser);
         field(out, "draw", seat.draw ? 1 : 0);
+        field(out, "last", last(seat));
         return out.toString();
     }
 
@@ -131,6 +133,7 @@ public final class Wire {
             else if ("phase".equals(key)) seat.phase = number(value, key);
             else if ("loser".equals(key)) seat.loser = number(value, key);
             else if ("draw".equals(key)) seat.draw = number(value, key) != 0;
+            else if ("last".equals(key)) last(value, seat);
             // Незнакомое поле пропускаем молча: связь с более новой версией
             // не должна обрываться из-за одного лишнего слова.
         }
@@ -242,6 +245,26 @@ public final class Wire {
         if (empty(value)) return out;
         for (String one : value.split(LIST, -1)) out.add(card(one));
         return out;
+    }
+
+    /**
+     * Последний ход записью «кто:род:карта» — «1:0:2-7».
+     *
+     * Врозь от остальных пар, потому что карта сама пишется через прочерк
+     * («масть-достоинство»), и разделителем ему быть нельзя.
+     */
+    private static String last(Seat seat) {
+        if (seat.lastWho < 0 || seat.lastKind < 0) return NONE;
+        return seat.lastWho + PAIR + seat.lastKind + PAIR + card(seat.lastCard);
+    }
+
+    private static void last(String value, Seat seat) {
+        if (empty(value)) return;
+        String[] parts = value.split(PAIR, -1);
+        if (parts.length < 3) throw new IllegalArgumentException("не последний ход: " + value);
+        seat.lastWho = number(parts[0], "кто ходил");
+        seat.lastKind = number(parts[1], "род хода");
+        seat.lastCard = card(parts[2]);
     }
 
     private static List<Seat.Pair> pairs(String value) {

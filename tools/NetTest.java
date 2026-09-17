@@ -95,6 +95,11 @@ public final class NetTest {
         Bot[] bots = new Bot[Table.SEATS];
         for (int p = 0; p < Table.SEATS; p++) bots[p] = new Bot(p, seed * 7 + p + 1);
 
+        // Последний сыгранный ход: с ним сверяется то, что приехало в виде.
+        int wasWho = -1;
+        int wasKind = -1;
+        Card wasCard = null;
+
         int guard = 0;
         while (!table.isOver()) {
             if (++guard > 20000) {
@@ -111,6 +116,7 @@ public final class NetTest {
             for (int p = 0; p < Table.SEATS; p++) {
                 checkSeat(seats[p], p, seed);
                 checkNoLeak(lines[p], p, seats, seed);
+                checkLast(seats[p], wasWho, wasKind, wasCard, seed);
             }
             checkTable(seats, seed);
 
@@ -133,6 +139,10 @@ public final class NetTest {
 
             if (move.kind == Wire.Move.PASS) rounds++;
             if (move.kind == Wire.Move.TAKE) takes++;
+
+            wasWho = who;
+            wasKind = move.kind;
+            wasCard = move.card;
         }
 
         games++;
@@ -206,6 +216,8 @@ public final class NetTest {
         while (true) {
             Seat seat = guest.receive();
             if (seat == null || seat.over()) return;
+
+            checkFresh(seat);
             if (seat.turn() != seat.me) continue;
 
             Wire.Move move = decide(bot, seat);
@@ -220,6 +232,28 @@ public final class NetTest {
     }
 
     // ----- общее -----
+
+    /**
+     * Вид, приехавший по каналу, не врёт про последний ход.
+     *
+     * Сверить его с настоящим здесь нечем: игрок видит только свой вид. Но
+     * бессмыслицу видно и так — ход картой без карты, «бито» с картой, чужое
+     * место за столом. Через канал едет та же строка, что разобрана выше, так
+     * что этого довольно.
+     */
+    private static void checkFresh(Seat seat) {
+        if (seat.lastWho < 0) return;
+
+        if (seat.lastWho >= seat.seats) {
+            throw new IllegalStateException("последним ходил игрок " + seat.lastWho
+                    + ", а за столом мест " + seat.seats);
+        }
+        boolean byCard = seat.lastKind == Wire.Move.HIT || seat.lastKind == Wire.Move.BEAT;
+        if (byCard != (seat.lastCard != null)) {
+            throw new IllegalStateException("последний ход " + seat.lastKind
+                    + " назван с картой " + seat.lastCard);
+        }
+    }
 
     /**
      * Ход игрока по его виду места.
@@ -271,6 +305,35 @@ public final class NetTest {
         }
     }
 
+    /**
+     * Последний ход доехал и назван верно.
+     *
+     * По виду «бито» и «беру» на вид не отличить друг от друга, поэтому экран
+     * узнаёт о чужом ходе только отсюда. Если поле потеряется или перепутается,
+     * за столом по проводу пропадёт чужой ход — а это половина партии.
+     */
+    private static void checkLast(Seat seat, int who, int kind, Card card, int seed) {
+        if (seat.lastWho != who || seat.lastKind != kind) {
+            throw new IllegalStateException("партия " + seed + ": последний ход приехал как "
+                    + seat.lastWho + "/" + seat.lastKind + ", а сыгран был " + who + "/" + kind);
+        }
+        boolean same = card == null ? seat.lastCard == null : card.equals(seat.lastCard);
+        if (!same) {
+            throw new IllegalStateException("партия " + seed + ": последним ходом названа "
+                    + (seat.lastCard == null ? "никакая карта" : seat.lastCard.name())
+                    + ", а сыграна " + (card == null ? "никакая" : card.name()));
+        }
+        if (kind == Wire.Move.PASS || kind == Wire.Move.TAKE) {
+            if (seat.lastCard != null) {
+                throw new IllegalStateException("партия " + seed
+                        + ": у хода без карты объявилась карта " + seat.lastCard.name());
+            }
+        } else if (kind >= 0 && seat.lastCard == null) {
+            throw new IllegalStateException("партия " + seed
+                    + ": ход картой приехал без карты");
+        }
+    }
+
     /** Карты не задваиваются: руки не пересекаются, а стол не растёт сам собой. */
     private static void checkTable(Seat[] seats, int seed) {
         for (Card card : seats[0].hand) {
@@ -285,6 +348,13 @@ public final class NetTest {
         }
         if (seats[0].table.size() != seats[1].table.size()) {
             throw new IllegalStateException("партия " + seed + ": про стол рассказано разное");
+        }
+
+        // Последний ход один на всех: он и так лежит на столе открытым, и
+        // разойтись в нём двум местам не в чем.
+        if (seats[0].lastWho != seats[1].lastWho || seats[0].lastKind != seats[1].lastKind) {
+            throw new IllegalStateException("партия " + seed
+                    + ": про последний ход рассказано разное");
         }
     }
 

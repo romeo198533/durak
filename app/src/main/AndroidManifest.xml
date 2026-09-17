@@ -16,6 +16,32 @@
 
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!-- Блютус — для игры вдвоём рядом, без интернета.
+
+         Права здесь не одно, а два поколения сразу. До Android 12 блютус
+         разрешался целиком и при установке; начиная с 12 система спрашивает
+         отдельно и только на то, что игре правда нужно, — связь со спаренным
+         устройством. Поэтому старые права объявлены с пределом: на новых
+         версиях они уже ничего не значат, а объявленные без предела мешали бы
+         установке.
+
+         Права на поиск незнакомых устройств здесь нет намеренно: телефоны
+         спаривают в системных настройках, и игра берёт готовый список. Меньше
+         разрешений — меньше окон, которые нужно вслух разбирать слепому. -->
+    <uses-permission
+        android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30" />
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_ADMIN"
+        android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+
+    <!-- Блютуса в телефоне может и не быть: игра и без него играется с
+         программой, поэтому требуем необязательно. -->
+    <uses-feature
+        android:name="android.hardware.bluetooth"
+        android:required="false" />
+
     <!-- Без этого блока список установленных синтезаторов речи вернёт один
          движок по умолчанию, и выбор синтезатора в настройках будет пустым.
          Ошибка тихая: на вид просто нет выбора. -->
@@ -64,6 +90,23 @@
 
         <activity
             android:name=".GameActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:exported="false" />
+
+        <activity
+            android:name=".LookActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:exported="false" />
+
+        <!-- Экраны игры вдвоём. Связь у них в руках, а не в разметке: уйди
+             экран со связи — и партия осталась бы ждать хода до бесконечности. -->
+        <activity
+            android:name=".NetActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:exported="false" />
+
+        <activity
+            android:name=".NetGameActivity"
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:exported="false" />
     </application>

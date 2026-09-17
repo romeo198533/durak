@@ -27,6 +27,17 @@ public final class Table {
     private int round = 1;
 
     /**
+     * Последний принятый ход — тот, о котором узнают все.
+     *
+     * Запоминается здесь, а не выводится экраном из сравнения двух видов: по
+     * виду «бито» и «беру» не отличить друг от друга, а угадывать, что было,
+     * экран не должен. Кто ходил, видно и так, а вот чем — только отсюда.
+     */
+    private int lastWho = -1;
+    private int lastKind = -1;
+    private Card lastCard;
+
+    /**
      * @param deckSize 36 или 52 карты.
      * @param seed     зерно перемешивания: с ним партию можно повторить.
      */
@@ -37,6 +48,9 @@ public final class Table {
     public void start() {
         game.start();
         round = 1;
+        lastWho = -1;
+        lastKind = -1;
+        lastCard = null;
     }
 
     public boolean isOver() {
@@ -63,6 +77,11 @@ public final class Table {
         seat.phase = game.phase();
         seat.loser = game.loser();
         seat.draw = game.isDraw();
+
+        // Последний ход — общий для всех: он и так лежит на столе открытым.
+        seat.lastWho = lastWho;
+        seat.lastKind = lastKind;
+        seat.lastCard = lastCard;
 
         seat.handCounts = new int[SEATS];
         for (int p = 0; p < SEATS; p++) seat.handCounts[p] = game.handCount(p);
@@ -98,7 +117,7 @@ public final class Table {
                 }
                 if (!game.attackOptions().contains(move.card)) return "Так зайти нельзя.";
                 game.attack(move.card);
-                return null;
+                break;
 
             case Wire.Move.BEAT:
                 if (move.card == null) return "Отбой без карты.";
@@ -107,24 +126,31 @@ public final class Table {
                 }
                 if (!game.defendOptions().contains(move.card)) return "Эта карта не бьёт.";
                 game.defend(move.card);
-                return null;
+                break;
 
             case Wire.Move.PASS:
                 if (game.attacker() != player) return "Сейчас не твой ход.";
                 if (!game.canPass()) return "Сейчас нельзя сказать «бито».";
                 game.pass();
                 round++;
-                return null;
+                break;
 
             case Wire.Move.TAKE:
                 if (game.defender() != player) return "Сейчас не твой ход.";
                 if (!game.canTake()) return "Сейчас нельзя взять.";
                 game.take();
                 round++;
-                return null;
+                break;
 
             default:
                 return "Непонятный ход.";
         }
+
+        // Запоминается только принятый ход: отказанный за столом не был, и
+        // рассказывать о нём игрокам нечего.
+        lastWho = player;
+        lastKind = move.kind;
+        lastCard = move.card;
+        return null;
     }
 }

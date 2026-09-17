@@ -55,11 +55,13 @@ jobs:
             app/src/main/java/ru/romeo198533/durak/Bot.java \
             app/src/main/java/ru/romeo198533/durak/Seat.java \
             app/src/main/java/ru/romeo198533/durak/Wire.java \
+            app/src/main/java/ru/romeo198533/durak/Words.java \
             app/src/main/java/ru/romeo198533/durak/Table.java \
             app/src/main/java/ru/romeo198533/durak/Link.java \
             app/src/main/java/ru/romeo198533/durak/MemoryLink.java \
             app/src/main/java/ru/romeo198533/durak/Host.java \
             app/src/main/java/ru/romeo198533/durak/Guest.java \
+            app/src/main/java/ru/romeo198533/durak/NetGame.java \
             tools/EngineTest.java \
             tools/NetTest.java
           java -cp /tmp/engine EngineTest

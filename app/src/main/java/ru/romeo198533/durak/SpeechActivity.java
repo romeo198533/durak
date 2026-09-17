@@ -17,16 +17,21 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Синтезатор речи: какой движок говорит и как звучит его голос.
+ * Голос и речь: какой движок говорит, как он звучит и что вообще говорится.
  *
  * Взято из «Говорящего таймера для кухни» почти дословно: там этот экран уже
  * отлажен на живых телефонах, и повторять эти грабли незачем. Разница одна —
  * проба читает не блюдо, а карту: «семь пик, туз бубей».
  *
  * Сверху — кнопка с выбранным синтезатором: нажатие открывает список
- * установленных в телефоне, выбор сразу звучит пробной фразой. Ниже скорость,
- * тон и громкость. Каждое значение показано кнопкой: нажатие на неё читает ту же
- * пробу, поэтому «поменял» и «услышал» — одно действие.
+ * установленных в телефоне, выбор сразу звучит пробной фразой. Рядом
+ * проговаривание: говорить всё подряд или отвечать только на касание. Ниже
+ * скорость, тон и громкость. Каждое значение показано кнопкой: нажатие на неё
+ * читает ту же пробу, поэтому «поменял» и «услышал» — одно действие.
+ *
+ * Проговаривание стоит здесь, а не в общем списке настроек: оно про то же, про
+ * речь, и в списке висело бы отдельным пунктом рядом с голосом, к которому и
+ * так относится.
  *
  * Движки перечисляются отдельным синтезатором, который тут же и опускается:
  * иначе список установленных движков не получить.
@@ -35,6 +40,10 @@ public class SpeechActivity extends Activity {
 
     /** Сколько ждать списка движков, прежде чем сказать, что его нет. */
     private static final long ENGINE_WAIT_MS = 3000L;
+
+    private static final String[] SPEAK_NAMES = {
+            "Проговаривать всё",
+            "Только по касанию"};
 
     /** Проба: те же слова, что звучат за столом. */
     private static final String PROBE = "Ходишь: семь пик. Козырь — туз бубей.";
@@ -52,6 +61,7 @@ public class SpeechActivity extends Activity {
 
     private Button engineButton;
     private Button systemButton;
+    private Button speakButton;
     private TextView engineHint;
     private Button speedValue;
     private Button speedDown;
@@ -75,7 +85,7 @@ public class SpeechActivity extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
-        setTitle("Синтезатор речи");
+        setTitle("Голос и речь");
 
         ScrollView scroll = new ScrollView(this);
         LinearLayout root = Skin.column(this);
@@ -92,6 +102,9 @@ public class SpeechActivity extends Activity {
         systemButton.setContentDescription("Настройки синтезатора в телефоне. "
                 + "Там ставят и включают движки");
         systemButton.setOnClickListener(view -> openSystemTts());
+
+        speakButton = big(root);
+        speakButton.setOnClickListener(view -> pickSpeak());
 
         speedValue = big(root);
         LinearLayout speedRow = pairs(root);
@@ -334,11 +347,31 @@ public class SpeechActivity extends Activity {
         probeSay("Громкость: " + Speech.volumeName(value) + ". " + PROBE);
     }
 
+    /**
+     * Что вообще говорится за столом.
+     *
+     * «Только по касанию» — для игры при людях: тогда о своём ходе сообщает
+     * короткая вибрация, и никто, кроме владельца, её не слышит.
+     */
+    private void pickSpeak() {
+        Ask.choose(this, "Что проговаривать", SPEAK_NAMES,
+                Prefs.speakAll(this) ? 0 : 1, which -> {
+                    Prefs.setSpeakAll(this, which == 0);
+                    update();
+                    Ui.say(this, SPEAK_NAMES[which]);
+                });
+    }
+
     private void update() {
         String label = Prefs.engineLabel(this);
         engineButton.setText("Синтезатор: " + label);
         engineButton.setContentDescription("Синтезатор: " + label
                 + ". Нажми, чтобы открыть список установленных");
+
+        String speak = SPEAK_NAMES[Prefs.speakAll(this) ? 0 : 1];
+        speakButton.setText("Проговаривание: " + speak);
+        speakButton.setContentDescription("Проговаривание: " + speak
+                + ". Нажми, чтобы сменить");
 
         int speed = Prefs.speed(this);
         value(speedValue, "Скорость", Speech.speedName(speed));
