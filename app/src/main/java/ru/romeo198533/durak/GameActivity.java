@@ -78,6 +78,9 @@ public class GameActivity extends Activity {
     /** Каким кеглем написано у соперника: переставлять его каждый ход незачем. */
     private int foeSizeShown;
 
+    /** Каким кеглем нарисована козырная карта на колоде. */
+    private int deckSizeShown;
+
     /** Какие карты лежат внизу и каким кеглем: по этому и решается, пересобирать ли. */
     private String handKey = "";
 
@@ -456,13 +459,22 @@ public class GameActivity extends Activity {
             foeButton.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, foeSize);
         }
 
+        // Козырная карта на колоде — того же размера, что карты в руке: она
+        // и есть карта, и мельче своих ей быть незачем.
+        int deckSize = Prefs.MY_SIZE_SP[Prefs.mySize(this)];
+        if (deckSize != deckSizeShown) {
+            deckSizeShown = deckSize;
+            deckButton.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, deckSize);
+        }
+
         // Надписи без описаний: диктор читает ровно то, что написано. Описания
         // остаются там, где на экране написано короче, чем нужно на слух, —
         // у колоды и у карт.
         plain(foeButton, "Соперник, " + Cards.count(game.handCount(FOE)));
         plain(tableText, tableText());
-        plain(deckButton,
-                game.deckCount() == 0 ? "Колода\nпуста" : "Колода\n" + Cards.count(game.deckCount()));
+        // На колоде лежит козырная карта — её и видно, а число карт под ней.
+        plain(deckButton, Skin.deckFace(this, game.trumpCard(), game.trump(),
+                game.deckCount()));
 
         describe(deckButton, deckWords() + " Козырь — " + trumpName);
 
@@ -482,7 +494,11 @@ public class GameActivity extends Activity {
      * диктора перечитывать кнопку, на которой он стоит.
      */
     private void plain(TextView view, CharSequence text) {
-        if (!text.equals(view.getText())) view.setText(text);
+        // Сравниваются строки, а не сами последовательности: у раскрашенной
+        // надписи с палитрой сравнивать нечего — две одинаковые на вид строки
+        // остаются разными объектами, и надпись переставлялась бы вхолостую,
+        // заставляя диктора перечитывать кнопку под пальцем.
+        if (!text.toString().equals(view.getText().toString())) view.setText(text);
     }
 
     private void describe(TextView view, CharSequence spoken) {

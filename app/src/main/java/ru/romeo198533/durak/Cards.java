@@ -61,6 +61,24 @@ public final class Cards {
         }
     }
 
+    /**
+     * Знак масти — то, что написано на карте.
+     *
+     * Масть на карте показывается знаком, а достоинство словом: «король» и
+     * трефа читаются слабовидящим сразу, а «К» и «т» приходится разгадывать.
+     * Вслух при этом называется слово: слепому знак не нужен, ему говорят
+     * «король треф».
+     */
+    public static String suitSymbol(int suit) {
+        switch (suit) {
+            case Card.SPADES: return "♠";
+            case Card.CLUBS: return "♣";
+            case Card.DIAMONDS: return "♦";
+            case Card.HEARTS: return "♥";
+            default: return "";
+        }
+    }
+
     public static String suitShort(int suit) {
         switch (suit) {
             case Card.SPADES: return "п";

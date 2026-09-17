@@ -5,6 +5,7 @@ import android.content.res.ColorStateList;
 import android.text.SpannableString;
 import android.text.Spanned;
 import android.text.style.ForegroundColorSpan;
+import android.text.style.RelativeSizeSpan;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
@@ -116,14 +117,59 @@ public final class Skin {
      */
     public static SpannableString colored(Activity a, Card card) {
         String rank = Cards.rankShort(card.rank);
-        String suit = Cards.suitShort(card.suit);
-        // Достоинство строкой выше масти: обе буквы крупные, и каждая своего
-        // цвета — иначе цвет масти и цвет цифры было бы не различить.
+        String suit = Cards.suitSymbol(card.suit);
+        // Достоинство строкой выше масти. Достоинство — буквой или цифрой,
+        // как и было: «К» и «6» слабовидящий читает сразу, а слово целиком
+        // заняло бы всю карту. Масть — знаком, а не буквой «п» или «т»: знак
+        // узнаётся с одного взгляда, букву же приходится разгадывать. Вслух
+        // при этом называется слово: слепому знак не нужен, ему говорят
+        // «король треф».
         SpannableString out = new SpannableString(rank + "\n" + suit);
         out.setSpan(new ForegroundColorSpan(Palette.color(Prefs.rankColor(a))),
                 0, rank.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         out.setSpan(new ForegroundColorSpan(Palette.color(Prefs.suitColor(a))),
                 rank.length() + 1, out.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        return out;
+    }
+
+    /** Подпись на колоде мельче самой карты: она поясняет, а не показывает. */
+    private static final float DECK_LABEL_SCALE = 0.5f;
+
+    /**
+     * Лицо колоды: козырная карта и сколько карт осталось.
+     *
+     * Козырь видно с самой раздачи, а не только по касанию: раньше на колоде
+     * стояло число, и какая масть козырь, слабовидящий узнавал, лишь тронув
+     * её. Козырная карта и лежит поверх колоды — как её и кладут на столе.
+     * Достоинство на ней буквой или цифрой и знак масти — как на картах в
+     * руке, чтобы карта читалась одинаково и там и тут.
+     *
+     * Когда колода разобрана, козырной карты уже нет, но козырь остаётся:
+     * тогда виден один знак масти.
+     */
+    public static SpannableString deckFace(Activity a, Card trump, int suit, int left) {
+        String head = "Козырь\n";
+        String rank = trump == null ? "" : Cards.rankShort(trump.rank);
+        String gap = rank.isEmpty() ? "" : " ";
+        String symbol = Cards.suitSymbol(trump == null ? suit : trump.suit);
+        String tail = "\n" + Cards.count(left);
+        String body = rank + gap + symbol;
+
+        SpannableString out = new SpannableString(head + body + tail);
+        int bodyStart = head.length();
+        int symbolStart = bodyStart + rank.length() + gap.length();
+        int bodyEnd = bodyStart + body.length();
+
+        out.setSpan(new RelativeSizeSpan(DECK_LABEL_SCALE),
+                0, bodyStart, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        out.setSpan(new RelativeSizeSpan(DECK_LABEL_SCALE),
+                bodyEnd, out.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        if (!rank.isEmpty()) {
+            out.setSpan(new ForegroundColorSpan(Palette.color(Prefs.rankColor(a))),
+                    bodyStart, symbolStart, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+        out.setSpan(new ForegroundColorSpan(Palette.color(Prefs.suitColor(a))),
+                symbolStart, bodyEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         return out;
     }
 
