@@ -5,6 +5,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.widget.Button;
+import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -20,9 +21,10 @@ import java.util.List;
  * «Бито»: обе на виду весь круг, потому что искать их в решительный момент
  * некогда, а «Бито» до поры объясняет, чего ещё не хватает.
  *
- * Между соперником и кнопками и между кнопками и своими картами стоят распорки
- * одинакового веса: кнопки встают на середину экрана, свои карты — на самый низ.
- * Без распорок всё липнет к верхнему краю, а внизу остаётся пустая полоса.
+ * Пустого места за столом нет: свободную высоту делят между собой три полосы —
+ * «Беру» с «Бито», ряд с колодой и полоса своих карт. Что выше и ниже них,
+ * занимает ровно столько, сколько нужно. Свои карты при этом стоят в самом низу,
+ * где рука их и ищет.
  *
  * Свои карты идут одной полосой слева направо, как их и держат в руке. Полоса
  * длиннее экрана — она прокручивается вбок, и диктор сам подводит её к той
@@ -102,6 +104,18 @@ public class GameActivity extends Activity {
 
     // ----- экран -----
 
+    /**
+     * Собрать стол.
+     *
+     * Свободную высоту делят три полосы — «Беру» с «Бито», ряд с колодой и
+     * полоса своих карт. Распорок здесь нет намеренно: распорка — это пустое
+     * место, в котором палец не находит ничего, а Валера просил, чтобы за
+     * столом был занят весь экран. Полосы с весом тянутся каждая на свою долю,
+     * и пустоты не остаётся ни при каком размере экрана.
+     *
+     * «Беру» и «Бито» — самая крупная доля: в решительный момент по ним бьют
+     * не целясь, и промах стоит хода.
+     */
     private void build() {
         LinearLayout root = Skin.column(this);
         root.setPadding(Skin.dp(this, 8), Skin.dp(this, 8), Skin.dp(this, 8), Skin.dp(this, 8));
@@ -114,62 +128,75 @@ public class GameActivity extends Activity {
         foeButton.setBackgroundColor(Palette.color(Prefs.cardColor(this)));
         foeButton.setPadding(Skin.dp(this, 4), Skin.dp(this, 12),
                 Skin.dp(this, 4), Skin.dp(this, 12));
-        root.addView(foeButton, spaced());
-
-        root.addView(Skin.spacer(this, 1f));
+        root.addView(foeButton, band(0f));
 
         // Стол — обычная надпись, а не кнопка: при касании диктор читает её как
         // есть, и подсказки «нажми, чтобы услышать ещё раз» к ней не нужно.
         tableText = Skin.text(this, "", 17);
-        root.addView(tableText, Skin.wide());
+        root.addView(tableText, band(0f));
 
         LinearLayout decisions = Skin.row(this);
-        takeButton = Skin.button(this, "Беру", 26);
+        takeButton = Skin.button(this, "Беру", 34);
         takeButton.setOnClickListener(view -> tapTake());
-        decisions.addView(takeButton, tall());
-        passButton = Skin.button(this, "Бито", 26);
+        decisions.addView(takeButton, fill(1f));
+        passButton = Skin.button(this, "Бито", 34);
         passButton.setOnClickListener(view -> tapPass());
-        decisions.addView(passButton, tall());
-        root.addView(decisions, Skin.wide());
+        decisions.addView(passButton, fill(1f));
+        root.addView(decisions, band(1.2f));
 
         LinearLayout middle = Skin.row(this);
 
-        restartButton = Skin.button(this, "Начать\nзаново", 16);
+        restartButton = Skin.button(this, "Начать\nзаново", 20);
         restartButton.setOnClickListener(view -> askRestart());
-        middle.addView(restartButton, Skin.weight(1f));
+        middle.addView(restartButton, fill(1f));
 
-        deckButton = Skin.button(this, "", 16);
+        deckButton = Skin.button(this, "", 20);
         deckButton.setOnClickListener(view -> sayDeck());
-        LinearLayout.LayoutParams deckParams = Skin.weight(1.4f);
-        deckParams.setMargins(Skin.dp(this, 4), 0, Skin.dp(this, 4), 0);
-        middle.addView(deckButton, deckParams);
+        middle.addView(deckButton, fill(1.4f));
 
-        surrenderButton = Skin.button(this, "Сдаться", 16);
+        surrenderButton = Skin.button(this, "Сдаться", 20);
         surrenderButton.setOnClickListener(view -> askSurrender());
-        middle.addView(surrenderButton, Skin.weight(1f));
+        middle.addView(surrenderButton, fill(1f));
 
-        root.addView(middle, spaced());
-
-        root.addView(Skin.spacer(this, 1f));
+        root.addView(middle, band(0.9f));
 
         HorizontalScrollView scroll = new HorizontalScrollView(this);
         scroll.setFillViewport(false);
         handBox = Skin.row(this);
+        handBox.setLayoutParams(new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT));
         scroll.addView(handBox);
-        root.addView(scroll, Skin.wide());
+        root.addView(scroll, band(1.1f));
 
         setContentView(root);
     }
 
-    private LinearLayout.LayoutParams spaced() {
-        LinearLayout.LayoutParams out = Skin.wide();
+    /**
+     * Полоса во всю ширину экрана.
+     *
+     * Вес 0 — полоса по содержимому: так стоят панель соперника и надпись
+     * стола, которым расти некуда и незачем. Вес больше нуля — полоса делит с
+     * остальными свободную высоту.
+     */
+    private LinearLayout.LayoutParams band(float weight) {
+        LinearLayout.LayoutParams out = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                weight > 0f ? 0 : LinearLayout.LayoutParams.WRAP_CONTENT,
+                weight);
         out.setMargins(0, Skin.dp(this, 4), 0, Skin.dp(this, 4));
         return out;
     }
 
-    private LinearLayout.LayoutParams tall() {
-        LinearLayout.LayoutParams out = Skin.weight(1f);
-        out.height = Skin.dp(this, Skin.BIG_DP);
+    /**
+     * Кнопка во всю высоту своей полосы.
+     *
+     * Высота не задаётся числом: полоса растянута, и кнопка должна тянуться
+     * вместе с ней, иначе под ней останется полоса фона.
+     */
+    private LinearLayout.LayoutParams fill(float weight) {
+        LinearLayout.LayoutParams out = new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.MATCH_PARENT, weight);
         out.setMargins(Skin.dp(this, 4), 0, Skin.dp(this, 4), 0);
         return out;
     }
@@ -228,7 +255,7 @@ public class GameActivity extends Activity {
             Card card = bot.defend(game);
             if (card == null) {
                 game.take();
-                announce("Соперник берёт.");
+                announce("Соперник взял.");
             } else {
                 game.defend(card);
                 announce("Соперник, " + card.name() + ".");
@@ -467,8 +494,10 @@ public class GameActivity extends Activity {
         for (Card card : cards) {
             Button button = Skin.card(this, card, sp, game.trump());
             button.setOnClickListener(view -> tapCard(card));
+            // Во всю высоту полосы: полоса растянута до самого низа экрана, и
+            // карта должна заполнять её целиком, а не висеть в ней островком.
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                    width, LinearLayout.LayoutParams.WRAP_CONTENT);
+                    width, LinearLayout.LayoutParams.MATCH_PARENT);
             params.setMargins(Skin.dp(this, 2), Skin.dp(this, 2),
                     Skin.dp(this, 2), Skin.dp(this, 2));
             handBox.addView(button, params);
