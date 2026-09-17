@@ -99,7 +99,9 @@ public final class Skin {
     public static Button card(Activity a, Card card, int sp, int trump) {
         Button out = button(a, "", sp);
         out.setText(colored(a, card));
-        String spoken = "Карта " + card.name();
+        // Без слова «карта»: на экране карт больше ничего нет, и повторять это
+        // на каждой из шести подряд незачем — «шесть пик» и есть карта.
+        String spoken = card.name();
         if (card.isTrump(trump)) spoken += ", козырная";
         out.setContentDescription(spoken);
         return out;

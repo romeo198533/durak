@@ -389,8 +389,9 @@ public class GameActivity extends Activity {
      * Стол словами: чем зашли и чем отбито.
      *
      * Пара читается как одно: «шесть пик бито семь пик» — зашли шестёркой, бито
-     * семёркой. Назвать одно лишь «бито» мало: тогда слышно, с чего сам пошёл,
-     * и не слышно, чем тебя накрыли.
+     * семёркой. Неотбитая карта называется одна, без пометки: лишнее слово про
+     * «ещё не бито» только мешает слушать, а что она одна — и так слышно,
+     * второго имени за ней не идёт.
      */
     private String tableText() {
         List<Game.Slot> slots = game.table();
@@ -399,8 +400,7 @@ public class GameActivity extends Activity {
         for (Game.Slot slot : slots) {
             if (out.length() > 0) out.append(", ");
             out.append(slot.attack.name());
-            out.append(slot.beaten() ? " бито " : " не бита");
-            if (slot.beaten()) out.append(slot.defend.name());
+            if (slot.beaten()) out.append(" бито ").append(slot.defend.name());
         }
         return out.toString();
     }
@@ -423,7 +423,7 @@ public class GameActivity extends Activity {
 
         // Надписи без описаний: диктор читает ровно то, что написано. Описания
         // остаются там, где на экране написано короче, чем нужно на слух, —
-        // у колоды, у «Бито» и у карт.
+        // у колоды и у карт.
         plain(foeButton, "Соперник, " + Cards.count(game.handCount(FOE)));
         plain(tableText, tableText());
         plain(deckButton,
@@ -432,13 +432,11 @@ public class GameActivity extends Activity {
         describe(deckButton, "Колода. В ней " + Cards.count(game.deckCount())
                 + ", козырь — " + trumpName);
 
-        // Обе кнопки всегда на виду и всегда нажимаются: «Бито» вместо запрета
-        // объясняет словами, чего ещё не хватает, — выключенная кнопка диктору
-        // не видна вовсе, и слепой просто не понял бы, куда она делась.
-        describe(passButton, game.canPass()
-                ? "Бито"
-                : "Бито. Пока нельзя: на столе есть неотбитая карта");
-
+        // У «Бито» описания нет намеренно, и меняться на ходу оно не должно:
+        // диктор читает изменившуюся подпись той кнопки, на которой стоит, — и
+        // сразу после своего хода Валера слышал «пока нельзя, на столе есть
+        // неотбитая карта» вместо хода соперника. Почему нельзя, «Бито»
+        // объясняет только тогда, когда её нажали впустую.
         showHand();
     }
 
