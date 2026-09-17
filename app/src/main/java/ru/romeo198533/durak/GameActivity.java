@@ -27,8 +27,12 @@ import java.util.List;
  * где рука их и ищет.
  *
  * Свои карты идут одной полосой слева направо, как их и держат в руке. Полоса
- * длиннее экрана — она прокручивается вбок, и диктор сам подводит её к той
- * карте, до которой дошёл.
+ * длиннее экрана — она прокручивается вбок, и диктор сам подводит её к той карте,
+ * до которой дошёл.
+ *
+ * Экран рисует не партию, а {@link Seat} — вид места, — и ходы шлёт на стол
+ * через {@link Wire}. Поэтому он же будет работать и в сетевой игре: там
+ * поменяется только то, откуда берётся вид и куда уходит ход.
  */
 public class GameActivity extends Activity {
 
@@ -54,9 +58,12 @@ public class GameActivity extends Activity {
 
     private final Handler handler = new Handler(Looper.getMainLooper());
 
-    private Game game;
+    private Table table;
     private Bot bot;
     private Voice voice;
+
+    /** Моё место за столом. Всё, что видно на экране, берётся отсюда. */
+    private Seat seat;
 
     /** Проговаривать ли ход соперника сам по себе или только по касанию. */
     private boolean speakAll;
@@ -226,25 +233,52 @@ public class GameActivity extends Activity {
         handler.removeCallbacks(foeStep);
         finished = false;
         handKey = "";
-        game = new Game(Prefs.deck(this), System.nanoTime());
+        table = new Table(Prefs.deck(this), System.nanoTime());
         bot = new Bot(FOE, System.nanoTime() ^ 0x2545F4914F6CDD1DL);
-        game.start();
+        table.start();
+        look();
 
-        Card open = game.trumpCard();
-        trumpName = open == null ? Cards.suitName(game.trump()) : open.name();
+        Card open = seat.trumpCard;
+        trumpName = open == null ? Cards.suitName(seat.trump) : open.name();
 
         refresh();
         // Рука вслух не перечисляется: её и так смотрят по картам, а список
         // шести карт подряд только отодвигает партию и мешает слушать.
         announce("Раздача. Козырь — " + trumpName + ". У тебя "
-                + Cards.count(game.handCount(HUMAN)) + ".");
+                + Cards.count(seat.handCounts[HUMAN]) + ".");
         advance();
+    }
+
+    /**
+     * Взять свежий вид места.
+     *
+     * Вид едет строкой туда и обратно — тем же проводом, что потом пойдёт по
+     * Блютусу. В одиночной игре это стоит одного разбора на ход, зато весь
+     * путь связи проверяется на живом телефоне задолго до сети: если вид не
+     * переживёт дорогу, это выяснится здесь, а не на партии с другом.
+     */
+    private void look() {
+        seat = Wire.decode(Wire.encode(table.seatFor(HUMAN)));
+    }
+
+    /**
+     * Ход за игрока: уходит на стол, и обратно приходит свежий вид.
+     *
+     * Отказ стола говорится вслух. По-хорошему его быть не должно — игрок
+     * спрашивает разрешения у своего вида, а стол судит теми же правилами, —
+     * но если они разойдутся, молчать нельзя: молчание выглядело бы как
+     * «кнопка не работает».
+     */
+    private void play(int player, Wire.Move move) {
+        String reason = table.act(player, move);
+        look();
+        if (reason != null) voice.say(reason);
     }
 
     /** Чей ход и что в нём требуется. */
     private void advance() {
         refresh();
-        if (game.isOver()) {
+        if (seat.over()) {
             finishGame();
             return;
         }
@@ -257,8 +291,8 @@ public class GameActivity extends Activity {
     }
 
     private boolean isFoeTurn() {
-        if (game.phase() == Game.PHASE_DEFEND) return game.defender() == FOE;
-        return game.attacker() == FOE;
+        if (seat.phase == Game.PHASE_DEFEND) return seat.defender == FOE;
+        return seat.attacker == FOE;
     }
 
     /**
@@ -270,34 +304,32 @@ public class GameActivity extends Activity {
      * карты уходят со стола молча.
      */
     private void stepFoe() {
-        if (game.isOver()) return;
+        if (seat.over()) return;
 
-        if (game.phase() == Game.PHASE_DEFEND && game.defender() == FOE) {
-            Card card = bot.defend(game);
+        if (seat.phase == Game.PHASE_DEFEND && seat.defender == FOE) {
+            Card card = bot.defend(table.seatFor(FOE));
             if (card == null) {
-                game.take();
+                play(FOE, Wire.Move.take());
                 announce("Соперник взял.");
             } else {
-                game.defend(card);
+                play(FOE, Wire.Move.beat(card));
                 announce("Соперник, " + card.name() + ".");
             }
             return;
         }
 
-        if (game.phase() == Game.PHASE_ATTACK && game.attacker() == FOE) {
-            Card card = bot.attack(game);
-            if (card == null && game.canPass()) {
-                game.pass();
+        if (seat.phase == Game.PHASE_ATTACK && seat.attacker == FOE) {
+            Card card = bot.attack(table.seatFor(FOE));
+            if (card == null) {
+                play(FOE, Wire.Move.pass());
                 // Без «соперник»: круг кончил он, и это уже слышно — карту
                 // перед этим называли его голосом. Дальше идёт «твой ход», и
                 // вместе выходит ровно «бито, твой ход».
                 announce("Бито.");
                 return;
             }
-            if (card != null) {
-                game.attack(card);
-                announce("Соперник, " + card.name() + ".");
-            }
+            play(FOE, Wire.Move.hit(card));
+            announce("Соперник, " + card.name() + ".");
         }
     }
 
@@ -310,10 +342,10 @@ public class GameActivity extends Activity {
      */
     private void promptHuman() {
         String hint;
-        if (game.phase() == Game.PHASE_DEFEND && game.defender() == HUMAN) {
-            Game.Slot open = game.unbeaten();
+        if (seat.phase == Game.PHASE_DEFEND && seat.defender == HUMAN) {
+            Seat.Pair open = seat.unbeaten();
             hint = open == null ? "Отбивайся." : "Отбивайся: " + open.attack.name() + ".";
-        } else if (game.table().isEmpty()) {
+        } else if (seat.table.isEmpty()) {
             hint = "Твой ход.";
         } else {
             hint = "Подкидывай.";
@@ -337,29 +369,29 @@ public class GameActivity extends Activity {
 
     private void tapCard(Card card) {
         handler.removeCallbacks(foeStep);
-        if (game.isOver()) return;
+        if (seat.over()) return;
 
-        if (game.phase() == Game.PHASE_DEFEND && game.defender() == HUMAN) {
-            if (!game.defendOptions().contains(card)) {
-                Game.Slot open = game.unbeaten();
+        if (seat.phase == Game.PHASE_DEFEND && seat.defender == HUMAN) {
+            if (!seat.defendOptions().contains(card)) {
+                Seat.Pair open = seat.unbeaten();
                 voice.say("Не отбиться. Бить "
                         + (open == null ? "нечего" : open.attack.name()) + ".");
                 return;
             }
-            game.defend(card);
+            play(HUMAN, Wire.Move.beat(card));
             voice.say("Бьёшь: " + card.name() + ".");
             advance();
             return;
         }
 
-        if (game.phase() == Game.PHASE_ATTACK && game.attacker() == HUMAN) {
-            if (!game.attackOptions().contains(card)) {
-                voice.say(game.table().isEmpty()
+        if (seat.phase == Game.PHASE_ATTACK && seat.attacker == HUMAN) {
+            if (!seat.attackOptions().contains(card)) {
+                voice.say(seat.table.isEmpty()
                         ? "Этой картой сейчас нельзя."
                         : "Подкидывать можно только по достоинству того, что на столе.");
                 return;
             }
-            game.attack(card);
+            play(HUMAN, Wire.Move.hit(card));
             voice.say("Ходишь: " + card.name() + ".");
             advance();
             return;
@@ -370,36 +402,36 @@ public class GameActivity extends Activity {
 
     private void tapTake() {
         handler.removeCallbacks(foeStep);
-        if (game.isOver()) return;
-        if (!game.canTake()) {
+        if (seat.over()) return;
+        if (seat.table.isEmpty()) {
             voice.say("Стол пустой — брать нечего.");
             return;
         }
-        if (game.defender() != HUMAN) {
+        if (seat.defender != HUMAN) {
             voice.say("Берёт тот, кто отбивается, а ты сейчас ходишь.");
             return;
         }
-        game.take();
-        voice.say("Берёшь. У тебя " + Cards.count(game.handCount(HUMAN)) + ".");
+        play(HUMAN, Wire.Move.take());
+        voice.say("Берёшь. У тебя " + Cards.count(seat.handCounts[HUMAN]) + ".");
         advance();
     }
 
     private void tapPass() {
         handler.removeCallbacks(foeStep);
-        if (game.isOver()) return;
-        if (game.attacker() != HUMAN) {
+        if (seat.over()) return;
+        if (seat.attacker != HUMAN) {
             voice.say("Бито говорит тот, кто ходил, а сейчас ты отбиваешься.");
             return;
         }
-        if (game.table().isEmpty()) {
+        if (seat.table.isEmpty()) {
             voice.say("Бито говорят, когда всё отбито. Сначала зайди картой.");
             return;
         }
-        if (!game.canPass()) {
+        if (!seat.canPass()) {
             voice.say("Бито нельзя: на столе есть неотбитая карта.");
             return;
         }
-        game.pass();
+        play(HUMAN, Wire.Move.pass());
         voice.say("Бито.");
         advance();
     }
@@ -419,8 +451,8 @@ public class GameActivity extends Activity {
      * по-разному в зависимости от того, чем до неё дотронулись.
      */
     private String deckWords() {
-        if (game.deckCount() == 0) return "Колода пуста.";
-        return "Колода, " + Cards.count(game.deckCount()) + ".";
+        if (seat.deckCount == 0) return "Колода пуста.";
+        return "Колода, " + Cards.count(seat.deckCount) + ".";
     }
 
     /**
@@ -432,10 +464,10 @@ public class GameActivity extends Activity {
      * второго имени за ней не идёт.
      */
     private String tableText() {
-        List<Game.Slot> slots = game.table();
+        List<Seat.Pair> slots = seat.table;
         if (slots.isEmpty()) return "На столе пусто";
         StringBuilder out = new StringBuilder();
-        for (Game.Slot slot : slots) {
+        for (Seat.Pair slot : slots) {
             if (out.length() > 0) out.append(", ");
             out.append(slot.attack.name());
             if (slot.beaten()) out.append(" бито ").append(slot.defend.name());
@@ -470,11 +502,10 @@ public class GameActivity extends Activity {
         // Надписи без описаний: диктор читает ровно то, что написано. Описания
         // остаются там, где на экране написано короче, чем нужно на слух, —
         // у колоды и у карт.
-        plain(foeButton, "Соперник, " + Cards.count(game.handCount(FOE)));
+        plain(foeButton, "Соперник, " + Cards.count(seat.handCounts[FOE]));
         plain(tableText, tableText());
         // На колоде лежит козырная карта — её и видно, а число карт под ней.
-        plain(deckButton, Skin.deckFace(this, game.trumpCard(), game.trump(),
-                game.deckCount()));
+        plain(deckButton, Skin.deckFace(this, seat.trumpCard, seat.trump, seat.deckCount));
 
         describe(deckButton, deckWords() + " Козырь — " + trumpName);
 
@@ -524,7 +555,8 @@ public class GameActivity extends Activity {
      * надпись: иначе достоинство обрезалось бы по краям карты.
      */
     private void showHand() {
-        List<Card> cards = game.handSorted(HUMAN);
+        // Рука уже пришла по порядку показа — раскладывать её здесь незачем.
+        List<Card> cards = seat.hand;
         int sp = Prefs.MY_SIZE_SP[Prefs.mySize(this)];
 
         // Пересобираем, только если карты и правда изменились. Иначе диктор
@@ -554,7 +586,7 @@ public class GameActivity extends Activity {
         int sizeSp = Math.min(sp, fitSp(width));
 
         for (Card card : cards) {
-            Button button = Skin.card(this, card, sizeSp, game.trump());
+            Button button = Skin.card(this, card, sizeSp, seat.trump);
             button.setOnClickListener(view -> tapCard(card));
             // Во всю высоту полосы: полоса растянута до самого низа экрана, и
             // карта должна заполнять её целиком, а не висеть в ней островком.
@@ -595,9 +627,9 @@ public class GameActivity extends Activity {
         handler.removeCallbacks(foeStep);
 
         String result;
-        if (game.isDraw()) {
+        if (seat.draw) {
             result = "Ничья: вы вышли одновременно.";
-        } else if (game.loser() == HUMAN) {
+        } else if (seat.loser == HUMAN) {
             result = "Ты дурак. Партия кончена.";
         } else {
             result = "Соперник дурак. Ты выиграл.";

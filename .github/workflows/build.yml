@@ -28,9 +28,13 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      # Правила проверяются до сборки: движок партии не знает про Android, и
-      # 600 партий вхолостую ловят ошибку в правилах раньше, чем она доедет
-      # до телефона.
+      # Партии гоняются до сборки: движок и протокол не знают про Android, и
+      # шестьсот партий вхолостую ловят ошибку в правилах или в проводе
+      # раньше, чем она доедет до телефона.
+      #
+      # Сначала правила: оба игрока — программы, ходы идут прямо в движок.
+      # Потом сетевая партия: то же самое, но каждый ход едет строкой через
+      # Wire, и каждый игрок играет по одному только своему виду места.
       #
       # Файлы перечислены поимённо, а не звёздочкой: рядом лежат экраны, и без
       # Android их не собрать. Список короткий и меняется редко.
@@ -43,8 +47,13 @@ jobs:
             app/src/main/java/ru/romeo198533/durak/Ru.java \
             app/src/main/java/ru/romeo198533/durak/Game.java \
             app/src/main/java/ru/romeo198533/durak/Bot.java \
-            tools/EngineTest.java
+            app/src/main/java/ru/romeo198533/durak/Seat.java \
+            app/src/main/java/ru/romeo198533/durak/Wire.java \
+            app/src/main/java/ru/romeo198533/durak/Table.java \
+            tools/EngineTest.java \
+            tools/NetTest.java
           java -cp /tmp/engine EngineTest
+          java -cp /tmp/engine NetTest
 
       # Сборка release, а не debug: подпись ставится снаружи, своим ключом.
       # Ключ, которым Android подписывает debug-сборки, генерируется заново
