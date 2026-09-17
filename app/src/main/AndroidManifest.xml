@@ -8,6 +8,12 @@
     <!-- Установка скачанного обновления: система спросит подтверждение. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!-- До Android 10 системная загрузка не кладёт файл в общую папку
+         «Загрузки» без этого права. Новее оно не нужно и не выдаётся. -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+
     <uses-permission android:name="android.permission.VIBRATE" />
 
     <!-- Без этого блока список установленных синтезаторов речи вернёт один
