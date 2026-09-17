@@ -158,6 +158,13 @@ public class LookActivity extends Activity {
         if (!Palette.readable(card, table)) {
             out.append("Карты сливаются со столом. ");
         }
+        // Цвет цифры красит не одну карту: им же написаны экраны — правила,
+        // настройки, инструкция. Тот же цвет на фоне стола дал бы невидимые
+        // слова там, где их читают глазами, и предупредить об этом надо здесь,
+        // где цвет и выбирают.
+        if (!Palette.readable(rank, table)) {
+            out.append("Надписи на экране сливаются с фоном. ");
+        }
         if (out.length() == 0) return "Разборчиво.";
         return out.toString();
     }

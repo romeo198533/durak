@@ -63,6 +63,27 @@ public final class Seat {
 
     public int defender;
 
+    /**
+     * Чей ход в нападении: зайти, подкинуть или сказать «бито».
+     *
+     * В защите ходит защищающийся, и это поле ни на что не влияет. Оно нужно
+     * затем, что подкидывать может не один: за столом на троих очередь
+     * доходит до каждого, и экран обязан знать, до кого именно.
+     */
+    public int mover;
+
+    /** Кто вышел: рука пуста и колода тоже. Вышедший за столом не игрок. */
+    public boolean[] done = new boolean[0];
+
+    /**
+     * Как звать каждого за столом — по имени, а не по номеру места.
+     *
+     * Имя нужно затем, чтобы назвать вслух чужой ход и чужую сдачу: «Валера
+     * сдался» вместо «игрок 2 сдался». Пусто — значит, имени не задали, и
+     * звать будут по месту.
+     */
+    public String[] names = new String[0];
+
     public int phase;
 
     /** Кто остался дураком. -1 — партия идёт или ничья. */
@@ -92,7 +113,7 @@ public final class Seat {
 
     /** Ход мой, и я заходят или подкидываю. */
     public boolean myAttack() {
-        return !over() && phase == Game.PHASE_ATTACK && attacker == me;
+        return !over() && phase == Game.PHASE_ATTACK && mover == me;
     }
 
     /** Ход мой, и я отбиваюсь. */
@@ -103,7 +124,7 @@ public final class Seat {
     /** Чья очередь ходить. -1 — партия кончена. */
     public int turn() {
         if (over()) return -1;
-        return phase == Game.PHASE_DEFEND ? defender : attacker;
+        return phase == Game.PHASE_DEFEND ? defender : mover;
     }
 
     public int trump() {
@@ -139,13 +160,31 @@ public final class Seat {
         if (!myAttack()) return out;
         if (table.size() >= Game.MAX_TABLE) return out;
 
+        // По пустому столу заходит только тот, с кого начался круг: подкинуть
+        // первым нечего, подкидывают по тому, что уже лежит.
+        if (table.isEmpty() && mover != attacker) return out;
+
         // Больше, чем защищающийся в силах отбить, не подкидывают.
-        if (!table.isEmpty() && unbeatenCount() >= handCounts[defender]) return out;
+        if (!table.isEmpty() && unbeatenCount() >= cardsAt(defender)) return out;
 
         for (Card card : hand) {
             if (table.isEmpty() || rankOnTable(card.rank)) out.add(card);
         }
         return out;
+    }
+
+    /**
+     * Сколько карт у места.
+     *
+     * Спрашивается по номеру из вида, а вид приходит по проводу от другой
+     * версии игры и разбирается нарочно терпимо: незнакомое поле пропускается,
+     * а недостающее остаётся пустым. Места, которого в виде не оказалось, для
+     * нас нет; ноль карт у него — ответ верный в том смысле, что заходить по
+     * такому виду всё равно нечем. Без этой проверки номер места уронил бы
+     * приложение прямо за столом.
+     */
+    private int cardsAt(int place) {
+        return place < 0 || place >= handCounts.length ? 0 : handCounts[place];
     }
 
     /** Чем я могу отбить незакрытую карту. */
@@ -163,6 +202,11 @@ public final class Seat {
     /** Мне можно сказать «бито»: круг есть, и всё на столе закрыто. */
     public boolean canPass() {
         return myAttack() && !table.isEmpty() && unbeatenCount() == 0;
+    }
+
+    /** Вышел ли игрок: рука пуста и колода тоже. */
+    public boolean done(int player) {
+        return player >= 0 && player < done.length && done[player];
     }
 
     /** Мне можно взять: круг есть. Берут и когда есть чем биться. */

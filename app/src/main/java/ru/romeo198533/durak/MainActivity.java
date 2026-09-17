@@ -6,6 +6,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.Gravity;
+import android.view.View;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -32,6 +33,9 @@ public class MainActivity extends Activity {
 
     private TextView clock;
 
+    /** Дверь обратно за стол: показывается, только когда партия идёт. */
+    private Button back;
+
     /** Перерисовка часов: раз в секунду, чтобы минута менялась вовремя. */
     private final Runnable tick = new Runnable() {
         @Override
@@ -57,6 +61,17 @@ public class MainActivity extends Activity {
         root.addView(clock, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
 
+        // Дверь обратно за стол. Партия по проводу живёт отдельно от экрана и
+        // переживает уход с него — а дороги назад иначе нет: уведомление в
+        // шторке показывается не на всяком телефоне, а без него игрок, ушедший
+        // в другое окно и вернувшийся через значок игры, остался бы от стола
+        // отрезанным. Видна она только тогда, когда партия правда идёт.
+        back = Skin.button(this, "Вернуться за стол", "Вернуться к партии по "
+                + "проводу, которая идёт прямо сейчас", 22);
+        back.setOnClickListener(view -> startActivity(new Intent(this, NetGameActivity.class)));
+        back.setVisibility(View.GONE);
+        root.addView(back, Skin.wide());
+
         LinearLayout buttons = Skin.row(this);
 
         Button start = Skin.button(this, "Начать игру", 22);
@@ -66,7 +81,7 @@ public class MainActivity extends Activity {
 
         Button settings = Skin.button(this, "Настройки", 22);
         settings.setContentDescription("Настройки: голос, проговаривание, "
-                + "размер карт, цвета, правила и обновление");
+                + "размер карт, цвета, имя, правила, инструкция и обновление");
         settings.setOnClickListener(view -> open(SettingsActivity.class));
         buttons.addView(settings, tall());
 
@@ -78,6 +93,11 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+
+        // Партию могли закрыть, пока экран спал, — тогда двери обратно быть не
+        // должно: кнопка, ведущая в пустоту, хуже её отсутствия.
+        back.setVisibility(NetGame.live() == null ? View.GONE : View.VISIBLE);
+
         showClock();
         handler.removeCallbacks(tick);
         handler.postDelayed(tick, 1000L);
@@ -97,11 +117,20 @@ public class MainActivity extends Activity {
         return out;
     }
 
+    /**
+     * Показать время.
+     *
+     * Надпись ставится только тогда, когда она правда другая: диктор читает
+     * вслух то, что меняется под пальцем, а часы стоят во всю верхнюю полосу, и
+     * палец на них попадает легко. Тикают они раз в секунду, а меняются раз в
+     * минуту — переставлять надпись шестьдесят раз в минуту значило бы читать
+     * время вслух посреди хода соперника. Описания у часов нет: диктор читает
+     * написанное, а написано ровно то, что нужно услышать.
+     */
     private void showClock() {
         LocalDateTime now = LocalDateTime.now();
         String text = Ru.fullDate(now) + ", " + Ru.time(now);
-        clock.setText(text);
-        clock.setContentDescription(text);
+        if (!text.equals(clock.getText().toString())) clock.setText(text);
     }
 
     private void open(Class<?> screen) {

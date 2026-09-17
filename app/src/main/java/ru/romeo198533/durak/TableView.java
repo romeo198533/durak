@@ -239,12 +239,17 @@ final class TableView {
         // Надписи без описаний: диктор читает ровно то, что написано. Описания
         // остаются там, где на экране написано короче, чем нужно на слух, —
         // у колоды и у карт.
-        plain(foeButton, "Соперник, " + Cards.count(foeCount()));
+        plain(foeButton, foesWords());
         plain(tableText, tableWords());
         // На колоде лежит козырная карта — её и видно, а число карт под ней.
         plain(deckButton, Skin.deckFace(activity, seat.trumpCard, seat.trump, seat.deckCount));
 
-        describe(deckButton, deckWords() + " Козырь — " + trumpName);
+        // Числа карт в описании нет намеренно: оно меняется почти каждый ход, а
+        // диктор читает изменившуюся подпись той кнопки, под которой стоит
+        // палец, — и игрок услышал бы «колода, 23» вместо хода соперника. Ровно
+        // на этом однажды споткнулось «Бито». Сколько карт в колоде, скажет
+        // нажатие: оно и так отвечает этими же словами.
+        describe(deckButton, "Колода. Козырь — " + trumpName);
 
         // У «Бито» описания нет намеренно, и меняться на ходу оно не должно:
         // диктор читает изменившуюся подпись той кнопки, на которой стоит, — и
@@ -254,12 +259,25 @@ final class TableView {
         showHand();
     }
 
-    /** У соперника за столом на двоих одно место — то, которое не моё. */
-    private int foeCount() {
+    /**
+     * Чужие места одной строкой: кто и сколько у него карт.
+     *
+     * За столом на двоих это по-прежнему «соперник, шесть» — как и было. За
+     * столом побольше мест столько же, сколько чужих рук, и каждое называется
+     * своим именем: без имени чужую руку пришлось бы искать по номеру, а номер
+     * за столом ничем не виден. Вышедший назван вышедшим: «ноль карт» и
+     * «вышел» — про него одно и то же, но второе короче и вернее.
+     */
+    private String foesWords() {
+        if (seat == null) return "";
+        StringBuilder out = new StringBuilder();
         for (int place = 0; place < seat.handCounts.length; place++) {
-            if (place != seat.me) return seat.handCounts[place];
+            if (place == seat.me) continue;
+            if (out.length() > 0) out.append(". ");
+            out.append(Words.who(seat, place));
+            out.append(seat.done(place) ? " вышел" : ", " + Cards.count(seat.handCounts[place]));
         }
-        return 0;
+        return out.toString();
     }
 
     /**

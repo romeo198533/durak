@@ -54,6 +54,17 @@ public final class Guest {
         return Wire.decodeReply(line);
     }
 
+    /**
+     * Назвать себя — первым словом, ещё до партии.
+     *
+     * Ответа здесь не ждут: имя не ход, и отказывать в нём нечего. Поэтому и
+     * звать это можно только до того, как за канал взялся читающий поток, —
+     * иначе ответ на ход и это слово разъехались бы.
+     */
+    public void hello(String name) throws IOException {
+        link.send(Wire.encodeName(name));
+    }
+
     /** Кто за столом на другом конце — для экрана. */
     public String host() {
         return link.name();

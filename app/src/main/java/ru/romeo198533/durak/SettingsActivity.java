@@ -1,14 +1,17 @@
 package ru.romeo198533.durak;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 
 /**
- * Настройки: четыре двери и два правила.
+ * Настройки: двери в голос и вид стола, имя и правила.
  *
  * Список короткий намеренно. Голос с проговариванием ушли под одну кнопку
  * «Голос и речь», цвета и размеры карт — под «Вид стола»: наверху висело
@@ -29,9 +32,12 @@ public class SettingsActivity extends Activity {
 
     private Button speechButton;
     private Button lookButton;
+    private Button nameButton;
     private Button foesButton;
     private Button passingButton;
     private Button deckButton;
+    private Button helpButton;
+    private Button contactButton;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -45,10 +51,16 @@ public class SettingsActivity extends Activity {
 
         speechButton = item(root, () -> startActivity(new Intent(this, SpeechActivity.class)));
         lookButton = item(root, () -> startActivity(new Intent(this, LookActivity.class)));
+        nameButton = item(root, this::pickName);
         foesButton = item(root, this::pickFoes);
         passingButton = item(root, this::pickPassing);
         deckButton = item(root, this::pickDeck);
         item(root, this::checkUpdate).setText("Обновление");
+
+        // Инструкция и переписка стоят последними: за ними ходят реже всего, а
+        // первым делом настройки открывают за голосом и видом стола.
+        helpButton = item(root, () -> startActivity(new Intent(this, HelpActivity.class)));
+        contactButton = item(root, this::writeToDeveloper);
 
         scroll.addView(root, Skin.wide());
         setContentView(scroll);
@@ -84,6 +96,8 @@ public class SettingsActivity extends Activity {
                         + ", " + SPEAK_NAMES[Prefs.speakAll(this) ? 0 : 1]);
         label(lookButton, "Вид стола", "цвета карт и стола, размер карт");
 
+        label(nameButton, "Как меня зовут", nameWords());
+
         String foes = Prefs.FOES_NAMES[Prefs.foes(this) - 1];
         label(foesButton, "Соперников", foes);
 
@@ -91,11 +105,86 @@ public class SettingsActivity extends Activity {
 
         label(deckButton, "Колода",
                 Prefs.deck(this) == Cards.DECK_52 ? DECK_NAMES[1] : DECK_NAMES[0]);
+
+        label(helpButton, "Инструкция", "как играть и что делать, если молчит");
+        labelOut(contactButton, "Написать разработчику", About.HANDLE,
+                "Открывает переписку в телеграме");
     }
 
+    /**
+     * Переписка с разработчиком — телеграм.
+     *
+     * Адрес показывается и вслух, и на экране: телеграма в телефоне может не
+     * быть вовсе, и тогда открывать нечего, а адрес всё равно нужен — по нему
+     * напишут с другого устройства.
+     */
+    private void writeToDeveloper() {
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(About.URL)));
+            // Сказано после, а не до: обещать «открываю», а потом не открыть —
+            // хуже, чем промолчать. Не выйдет — объяснение скажет адрес.
+            Ui.say(this, "Открываю переписку в телеграме.");
+        } catch (RuntimeException missing) {
+            // Телеграм не поставили или он не отозвался — говорим адрес словами.
+            Ask.explain(this, "Телеграм не открылся. Наш адрес: " + About.HANDLE + ".");
+        }
+    }
+
+    /**
+     * Надпись на двери.
+     *
+     * «Нажми, чтобы открыть» — не пустая вежливость: за дверью бывает и чужое
+     * приложение, и тогда сказано, что именно откроется. Иначе слепой игрок
+     * слышит «открыть», а открывается телеграм — и непонятно, то ли это, чего
+     * он хотел.
+     */
     private void label(Button button, String name, String value) {
         button.setText(name + ": " + value);
         button.setContentDescription(name + ": " + value + ". Нажми, чтобы открыть");
+    }
+
+    /** То же, но для двери, за которой чужое приложение. */
+    private void labelOut(Button button, String name, String value, String what) {
+        button.setText(name + ": " + value);
+        button.setContentDescription(name + ": " + value + ". " + what);
+    }
+
+    // ----- имя -----
+
+    /** Имя или, если его не задали, чем его заменят за столом. */
+    private String nameWords() {
+        String name = Prefs.name(this);
+        return name.isEmpty() ? "без имени, зовут по месту" : name;
+    }
+
+    /**
+     * Как меня зовут.
+     *
+     * Имя нужно затем, чтобы за столом с живыми людьми назвать вслух того, кто
+     * сдался, и того, чей ход: «Валера, семь пик» вместо «игрок два». Пишется
+     * руками — а имя, которое человек себе выбрал, он и без диктора наберёт.
+     *
+     * Разделители провода из имени выкидываются при сохранении
+     * ({@link Prefs#clean}): запятая или точка с запятой развалили бы строку
+     * вида на полуслове, и партия бы сломалась на ровном месте.
+     */
+    private void pickName() {
+        final EditText input = new EditText(this);
+        input.setText(Prefs.name(this));
+        input.setSelectAllOnFocus(true);
+        input.setContentDescription("Имя за столом");
+
+        new AlertDialog.Builder(this)
+                .setTitle("Как меня зовут")
+                .setView(input)
+                .setPositiveButton("Сохранить", (dialog, which) -> {
+                    Prefs.setName(this, input.getText().toString());
+                    show();
+                    Ui.say(this, "Как меня зовут: " + nameWords());
+                })
+                .setNegativeButton("Отмена", null)
+                .create()
+                .show();
     }
 
     // ----- правила -----
@@ -111,10 +200,12 @@ public class SettingsActivity extends Activity {
 
     private void pickPassing() {
         Ask.choose(this, "Вид дурака", PASSING_NAMES, Prefs.passing(this) ? 1 : 0, which -> {
-            if (which == 1 && Prefs.foes(this) < 2) {
-                Ask.explain(this, "Переводной дурак — игра на троих и больше, "
-                        + "а за столом пока один соперник. Как только соперников "
-                        + "можно будет выбрать, переводной заработает.");
+            if (which == 1) {
+                // Тот же ответ, что и перед раздачей: выбор, который ничего не
+                // меняет, обещать нельзя.
+                Ask.explain(this, "Переводной дурак ещё не сделан: партия идёт "
+                        + "подкидная. Перевод меняет весь круг, и его сделаю "
+                        + "отдельным шагом.");
                 return;
             }
             Prefs.setPassing(this, which == 1);

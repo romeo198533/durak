@@ -17,12 +17,15 @@ import android.os.Looper;
  * Тот же вид и те же ходы приходят по сети в {@link NetGameActivity} — и
  * показываются тем же {@link TableView}. Двух столов, которые могут разойтись
  * на вид, не бывает.
+ *
+ * Место человека — первое, остальные за столом программы: сколько их, решено
+ * в настройках. Каждая играет по своему виду места, как играл бы живой игрок,
+ * и ни одна не знает чужой руки.
  */
 public class GameActivity extends Activity implements TableView.Listener {
 
-    /** Человек всегда первый, программа — вторая. */
+    /** Человек всегда первый, программы — за ним. */
     private static final int HUMAN = 0;
-    private static final int FOE = 1;
 
     /** Пауза перед ходом соперника: чтобы его фраза не наезжала на свою. */
     private static final long FOE_PAUSE_MS = 1200L;
@@ -30,7 +33,10 @@ public class GameActivity extends Activity implements TableView.Listener {
     private final Handler handler = new Handler(Looper.getMainLooper());
 
     private Table table;
-    private Bot bot;
+
+    /** Программы по местам: на своём месте — null, там сидит человек. */
+    private Bot[] bots = new Bot[0];
+
     private Voice voice;
     private TableView view;
 
@@ -85,8 +91,17 @@ public class GameActivity extends Activity implements TableView.Listener {
     private void deal() {
         handler.removeCallbacks(foeStep);
         finished = false;
-        table = new Table(Prefs.deck(this), System.nanoTime());
-        bot = new Bot(FOE, System.nanoTime() ^ 0x2545F4914F6CDD1DL);
+        int players = Prefs.foes(this) + 1;
+        table = new Table(Prefs.deck(this), System.nanoTime(), players);
+
+        // Программа на каждое чужое место, и у каждой своё зерно: две
+        // программы с одним зерном играли бы одинаково, и за столом это было
+        // бы видно как две копии одного игрока.
+        bots = new Bot[players];
+        for (int p = 1; p < players; p++) {
+            bots[p] = new Bot(p, System.nanoTime() ^ (0x2545F4914F6CDD1DL + p * 7919L));
+        }
+
         table.start();
         look();
 
@@ -135,7 +150,7 @@ public class GameActivity extends Activity implements TableView.Listener {
 
         // Чужой ход называется здесь, а не там, где он сделан: экран рисует вид,
         // и о ходе он узнаёт из вида же — так же, как узнает его по Блютусу.
-        announce(Words.moved(seat, HUMAN, Words.FOE));
+        announce(Words.moved(seat, HUMAN));
 
         if (seat.over()) {
             finishGame();
@@ -149,9 +164,10 @@ public class GameActivity extends Activity implements TableView.Listener {
         promptHuman();
     }
 
+    /** Ход чей-то чужой: за столом бывает и двое программ, и трое. */
     private boolean isFoeTurn() {
-        if (seat.phase == Game.PHASE_DEFEND) return seat.defender == FOE;
-        return seat.attacker == FOE;
+        int who = seat.turn();
+        return who > 0 && who < bots.length;
     }
 
     /**
@@ -164,15 +180,20 @@ public class GameActivity extends Activity implements TableView.Listener {
     private void stepFoe() {
         if (seat.over()) return;
 
-        if (seat.phase == Game.PHASE_DEFEND && seat.defender == FOE) {
-            Card card = bot.defend(table.seatFor(FOE));
-            play(FOE, card == null ? Wire.Move.take() : Wire.Move.beat(card));
+        // Ходит тот, чей черёд, а не всегда второй: за столом на троих очередь
+        // доходит и до третьего, и подкидывает не один заходящий.
+        int who = seat.turn();
+        if (who <= 0 || who >= bots.length) return;
+
+        if (seat.phase == Game.PHASE_DEFEND && seat.defender == who) {
+            Card card = bots[who].defend(table.seatFor(who));
+            play(who, card == null ? Wire.Move.take() : Wire.Move.beat(card));
             return;
         }
 
-        if (seat.phase == Game.PHASE_ATTACK && seat.attacker == FOE) {
-            Card card = bot.attack(table.seatFor(FOE));
-            play(FOE, card == null ? Wire.Move.pass() : Wire.Move.hit(card));
+        if (seat.phase == Game.PHASE_ATTACK && seat.mover == who) {
+            Card card = bots[who].attack(table.seatFor(who));
+            play(who, card == null ? Wire.Move.pass() : Wire.Move.hit(card));
         }
     }
 
@@ -196,10 +217,25 @@ public class GameActivity extends Activity implements TableView.Listener {
 
     // ----- ходы человека -----
 
+    /**
+     * Партия доиграна — объяснить нажатие словами, а не молчанием.
+     *
+     * Итог партии сказан, и вопрос о новой раздаче закрывает выход. Но вопрос
+     * можно снять кнопкой «назад», а карты и кнопки остаются на экране — и
+     * тогда касание, на которое стол больше не отзывается, читается как «игра
+     * сломалась». Хуже всего то, что выход отсюда всё-таки есть: «Начать
+     * заново». О нём и надо сказать.
+     */
+    private boolean done() {
+        if (!seat.over()) return false;
+        voice.say("Партия кончена. Начать заново — кнопкой «Начать заново».");
+        return true;
+    }
+
     @Override
     public void onCard(Card card) {
         handler.removeCallbacks(foeStep);
-        if (seat.over()) return;
+        if (done()) return;
 
         if (seat.phase == Game.PHASE_DEFEND && seat.defender == HUMAN) {
             if (!seat.defendOptions().contains(card)) {
@@ -229,13 +265,18 @@ public class GameActivity extends Activity implements TableView.Listener {
     @Override
     public void onTake() {
         handler.removeCallbacks(foeStep);
-        if (seat.over()) return;
+        if (done()) return;
         if (seat.table.isEmpty()) {
             voice.say("Стол пустой — брать нечего.");
             return;
         }
-        if (seat.defender != HUMAN) {
-            voice.say("Берёт тот, кто отбивается, а ты сейчас ходишь.");
+        if (!seat.canTake()) {
+            // Право на взятие спрашивается у вида, а не у роли: отбился — и
+            // партия снова в нападении, где брать нечего, хотя защищающийся
+            // по-прежнему я. Роль об этом молчит, вид — нет.
+            voice.say(seat.defender == HUMAN
+                    ? "Сейчас брать нельзя."
+                    : "Берёт тот, кто отбивается, а ты сейчас ходишь.");
             return;
         }
         play(HUMAN, Wire.Move.take());
@@ -246,7 +287,7 @@ public class GameActivity extends Activity implements TableView.Listener {
     @Override
     public void onPass() {
         handler.removeCallbacks(foeStep);
-        if (seat.over()) return;
+        if (done()) return;
         if (seat.attacker != HUMAN) {
             voice.say("Бито говорит тот, кто ходил, а сейчас ты отбиваешься.");
             return;

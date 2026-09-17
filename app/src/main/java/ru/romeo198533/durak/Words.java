@@ -38,22 +38,37 @@ public final class Words {
     }
 
     /**
+     * Как звать игрока за столом.
+     *
+     * Имя каждый называет сам, и оно едет всем вместе с видом. Не назвал —
+     * зовём по месту: за столом на двоих «соперник», за столом побольше —
+     * «игрок» и номер. Номер тот же, что и на экране, поэтому спутать некого.
+     */
+    public static String who(Seat seat, int player) {
+        if (seat != null && player >= 0 && player < seat.names.length) {
+            String name = seat.names[player];
+            if (name != null && !name.trim().isEmpty()) return name.trim();
+        }
+        if (seat == null || seat.seats <= 2) return FOE;
+        return "Игрок " + (player + 1);
+    }
+
+    /**
      * Что сказал последний ход за столом.
      *
      * Имя карты берётся из вида, а не угадывается сравнением двух видов: по
      * столу «бито» и «беру» на вид не отличить друг от друга. Кто ходил и чем —
      * то, что лежит на столе открытым, поэтому об этом и можно говорить вслух.
      *
-     * @param who как назвать чужого игрока — «соперник», «Валера».
      * @return сказанное или null, если говорить нечего: хода ещё не было или
      *         ходил я сам — свой ход игрок и так слышал.
      */
-    public static String moved(Seat seat, int me, String who) {
+    public static String moved(Seat seat, int me) {
         if (seat == null || seat.lastWho < 0 || seat.lastWho == me) return null;
 
         switch (seat.lastKind) {
             case Wire.Move.TAKE:
-                return who + " взял.";
+                return who(seat, seat.lastWho) + " взял.";
             case Wire.Move.PASS:
                 // Без имени: круг кончил он, и это уже слышно — карту перед
                 // этим называли его голосом. Дальше идёт «твой ход», и вместе
@@ -61,15 +76,27 @@ public final class Words {
                 return "Бито.";
             default:
                 if (seat.lastCard == null) return null;
-                return who + ", " + seat.lastCard.name() + ".";
+                return who(seat, seat.lastWho) + ", " + seat.lastCard.name() + ".";
         }
     }
 
-    /** Конец партии словами: кто дурак и что теперь. */
+    /**
+     * Конец партии словами: кто дурак и что теперь.
+     *
+     * Сдача называется отдельно: дураком остаётся тот, кто сдался, но сказано
+     * будет именно «сдался». За столом это разные вещи — одно дело проиграть в
+     * игре, другое выйти из неё самому, — и слышать их надо по-разному.
+     */
     public static String result(Seat seat, int me) {
-        if (seat.draw) return "Ничья: вы вышли одновременно.";
+        if (seat.draw) return "Ничья: все вышли разом.";
+
+        if (seat.lastKind == Wire.Move.SURRENDER) {
+            if (seat.loser == me) return "Ты сдался. Партия кончена.";
+            return who(seat, seat.loser) + " сдался. Ты выиграл.";
+        }
+
         if (seat.loser == me) return "Ты дурак. Партия кончена.";
-        return "Соперник дурак. Ты выиграл.";
+        return who(seat, seat.loser) + " дурак. Ты выиграл.";
     }
 
     /**

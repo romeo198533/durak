@@ -35,6 +35,8 @@ public final class Prefs {
     private static final String KEY_DECK = "deck";
     private static final String KEY_PASSING = "passing";
     private static final String KEY_FOES = "foes";
+    private static final String KEY_NAME = "my_name";
+    private static final String KEY_LINK = "link";
 
     /** Размеры карт по возрастанию: от мелкого до очень крупного. */
     public static final int[] MY_SIZE_SP = {18, 26, 36, 48};
@@ -42,9 +44,15 @@ public final class Prefs {
     public static final String[] SIZE_NAMES = {
             "мелкий", "средний", "крупный", "очень крупный"};
 
-    /** Сколько соперников — пока один, но выбор уже есть. */
-    public static final int[] FOES_ALLOWED = {1};
-    public static final String[] FOES_NAMES = {"один"};
+    /**
+     * Сколько соперников за столом: один, двое или трое.
+     *
+     * За столом на троих и больше круг длиннее — подкидывает не один
+     * заходящий, а каждый по очереди, — и правила одни и те же, поэтому
+     * выбор простой: сколько программ посадить напротив.
+     */
+    public static final int[] FOES_ALLOWED = {1, 2, 3};
+    public static final String[] FOES_NAMES = {"один", "двое", "трое"};
 
     private Prefs() {
     }
@@ -72,13 +80,17 @@ public final class Prefs {
                 .apply();
     }
 
-    /** Как назвать выбранный синтезатор вслух. */
+    /**
+     * Как назвать выбранный синтезатор вслух.
+     *
+     * Имени пакета здесь быть не должно: синтезатор без человеческого названия
+     * прозвучал бы как «com.google.android.tts» — по буквам и без толку. Это
+     * фраза для слуха, а не для глаза.
+     */
     public static String engineLabel(Context context) {
         String name = engineName(context).trim();
         if (!name.isEmpty()) return name;
-        String engine = engine(context);
-        if (engine.isEmpty()) return "как в системе";
-        return engine;
+        return engine(context).isEmpty() ? "как в системе" : "выбранный синтезатор";
     }
 
     public static int speed(Context context) {
@@ -198,6 +210,62 @@ public final class Prefs {
 
     public static void setFoes(Context context, int value) {
         file(context).edit().putInt(KEY_FOES, value).apply();
+    }
+
+    // ----- имя за столом -----
+
+    /**
+     * Как меня зовут за столом.
+     *
+     * Имя уезжает другим игрокам: по нему за столом называют того, кто сдался,
+     * и того, чей ход. Пусто — за столом скажут «Игрок» и номер места.
+     */
+    public static String name(Context context) {
+        return file(context).getString(KEY_NAME, "");
+    }
+
+    public static void setName(Context context, String value) {
+        file(context).edit().putString(KEY_NAME, clean(value)).apply();
+    }
+
+    /**
+     * Имя, пригодное для провода.
+     *
+     * Точка с запятой и знак равенства развалили бы строку вида на полуслове, а
+     * запятая — список имён за столом. Человеку незачем диктовать разделители, а
+     * ошибку его глазами не видно: имя с запятой уехало бы обрывком. Поэтому
+     * лишнее отсекается здесь, при сохранении, и дальше по коду едет уже
+     * безопасное имя.
+     */
+    public static String clean(String value) {
+        if (value == null) return "";
+        StringBuilder out = new StringBuilder();
+        for (int i = 0; i < value.length() && out.length() < 20; i++) {
+            char symbol = value.charAt(i);
+            boolean divider = symbol == ';' || symbol == '=' || symbol == ','
+                    || symbol == '\n' || symbol == '\r' || symbol == '\t';
+            out.append(divider ? ' ' : symbol);
+        }
+        return out.toString().trim().replaceAll(" {2,}", " ");
+    }
+
+    // ----- чем связываться -----
+
+    /** Блютус: телефоны сводят в настройках, зато он есть везде и не нужен роутер. */
+    public static final int LINK_BLUETOOTH = 0;
+
+    /** Вай-фай: одна сеть на двоих и никакого спаривания. */
+    public static final int LINK_WIFI = 1;
+
+    public static final String[] LINK_NAMES = {"Блютус", "Вай-фай"};
+
+    public static int link(Context context) {
+        int value = file(context).getInt(KEY_LINK, LINK_BLUETOOTH);
+        return value == LINK_WIFI ? LINK_WIFI : LINK_BLUETOOTH;
+    }
+
+    public static void setLink(Context context, int value) {
+        file(context).edit().putInt(KEY_LINK, value).apply();
     }
 
     private static int clamp(int value, int min, int max) {

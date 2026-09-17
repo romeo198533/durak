@@ -16,6 +16,32 @@
 
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!-- Партия живёт в фоне, пока её смотрят не с экрана, а из другого окна:
+         свернул игру или погасил телефон — соперник за столом никуда не делся,
+         и связь рвать нельзя. Ради этого поднимается служба переднего плана, а
+         ей нужны оба разрешения: одно общее, другое — на связь с устройством,
+         то есть на блютус и вай-фай, которыми игра и разговаривает. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+
+    <!-- Уведомление о партии. Нужно не ради слов в шторке: без него на Android
+         13 и новее система не показывает уведомление службы, а сама служба всё
+         равно живёт. Спрашивать его отдельно игра не станет — из-за одной
+         строчки в шторке устраивать слепому ещё один диалог не стоит. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Вай-фай, которым игра связывает два телефона в одной сети.
+
+         Разрешение не про сам сокет, а про службу переднего плана: на Android
+         14 и новее тип «связь с устройством» пускают только тогда, когда игре
+         есть чем доказать, что связь настоящая. Достаточно любого одного из
+         двух — либо выданного в рантайме блютуса, либо вот этого. Блютус
+         спрашивают окном и человек может отказать, а это выдаётся при
+         установке молча, поэтому путь вай-фая защищён им: без него партия в
+         фоне падала бы с отказом в доступе у того, кто блютусом не пользуется.
+         Спрашивать его отдельно у слепого не приходится — окна не будет. -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+
     <!-- Блютус — для игры вдвоём рядом, без интернета.
 
          Права здесь не одно, а два поколения сразу. До Android 12 блютус
@@ -52,6 +78,13 @@
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:mimeType="application/vnd.android.package-archive" />
+        </intent>
+        <!-- Ссылка на телеграм открывается чужим приложением: без этой строки
+             на Android 11 и новее его может не оказаться в поле зрения, и
+             кнопка «Написать разработчику» молча ничего не сделает. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
         </intent>
     </queries>
 
@@ -98,8 +131,14 @@
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:exported="false" />
 
-        <!-- Экраны игры вдвоём. Связь у них в руках, а не в разметке: уйди
-             экран со связи — и партия осталась бы ждать хода до бесконечности. -->
+        <!-- Инструкция: длинный текст, читают и слушают по абзацам. -->
+        <activity
+            android:name=".HelpActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:exported="false" />
+
+        <!-- Экраны игры вместе: тут связываются и тут же играют. Связь живёт
+             не в экране, а в партии, поэтому уход экрана её не рвёт. -->
         <activity
             android:name=".NetActivity"
             android:configChanges="orientation|screenSize|keyboardHidden"
@@ -109,5 +148,12 @@
             android:name=".NetGameActivity"
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:exported="false" />
+
+        <!-- Партия в фоне: пока идёт игра, служба держит приложение живым, а в
+             шторке видно, что игра идёт, и туда же можно вернуться за стол. -->
+        <service
+            android:name=".GameService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
     </application>
 </manifest>

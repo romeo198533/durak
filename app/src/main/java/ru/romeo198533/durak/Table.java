@@ -12,14 +12,11 @@ import java.util.List;
  * правилам. Клиент судит ходы у себя лишь для подсказки; последнее слово всегда
  * здесь, и отказ возвращается словами, а не молчанием.
  *
- * Пока мест двое — движок {@link Game} написан на двоих. Третий игрок придёт
- * вместе с обобщением движка на N мест, и вид места уже к этому готов: чужие
- * руки в нём идут числом, а не списком.
+ * Мест за столом сколько угодно — правила одни и те же. Глава стола ничем не
+ * выделен: его место такое же, как чужое, и ходы его проходят ту же проверку.
+ * Выделено только одно право — раздать заново, потому что колода лежит у него.
  */
 public final class Table {
-
-    /** Сколько мест за столом. */
-    public static final int SEATS = 2;
 
     private final Game game;
 
@@ -37,12 +34,37 @@ public final class Table {
     private int lastKind = -1;
     private Card lastCard;
 
+    /** Зерно раздачи: с ним партию можно повторить, а заново — раздать другую. */
+    private final long seed;
+
+    /**
+     * Как звать каждого за столом.
+     *
+     * Имя каждый называет сам, и оно едет всем: без него чужую сдачу и чужой ход
+     * пришлось бы объявлять по номеру места, а это за столом звучит как «игрок
+     * два сдался». Пусто — так и скажут, по номеру.
+     */
+    private final String[] names;
+
     /**
      * @param deckSize 36 или 52 карты.
      * @param seed     зерно перемешивания: с ним партию можно повторить.
+     * @param players  сколько мест за столом.
      */
-    public Table(int deckSize, long seed) {
-        this.game = new Game(deckSize, seed);
+    public Table(int deckSize, long seed, int players) {
+        this.seed = seed;
+        this.game = new Game(deckSize, seed, players);
+        this.names = new String[game.players()];
+    }
+
+    /**
+     * Как звать игрока за столом.
+     *
+     * Имя называет сам игрок — первым словом, ещё до партии. Стол его только
+     * запоминает и раздаёт всем: сам он имён не выдумывает.
+     */
+    public void setName(int player, String name) {
+        if (player >= 0 && player < names.length) names[player] = name;
     }
 
     public void start() {
@@ -57,23 +79,31 @@ public final class Table {
         return game.isOver();
     }
 
+    /** Сколько мест за столом. */
+    public int seats() {
+        return game.players();
+    }
+
     /** Чья очередь ходить. -1 — партия кончена. */
     public int turn() {
         if (game.isOver()) return -1;
-        return game.phase() == Game.PHASE_DEFEND ? game.defender() : game.attacker();
+        return game.phase() == Game.PHASE_DEFEND ? game.defender() : game.mover();
     }
 
     /** Вид места: то, что уедет этому игроку и только ему. */
     public Seat seatFor(int player) {
+        int seats = game.players();
+
         Seat seat = new Seat();
         seat.me = player;
-        seat.seats = SEATS;
+        seat.seats = seats;
         seat.round = round;
         seat.trump = game.trump();
         seat.trumpCard = game.trumpCard();
         seat.deckCount = game.deckCount();
         seat.attacker = game.attacker();
         seat.defender = game.defender();
+        seat.mover = game.mover();
         seat.phase = game.phase();
         seat.loser = game.loser();
         seat.draw = game.isDraw();
@@ -83,8 +113,13 @@ public final class Table {
         seat.lastKind = lastKind;
         seat.lastCard = lastCard;
 
-        seat.handCounts = new int[SEATS];
-        for (int p = 0; p < SEATS; p++) seat.handCounts[p] = game.handCount(p);
+        seat.names = names.clone();
+        seat.handCounts = new int[seats];
+        seat.done = new boolean[seats];
+        for (int p = 0; p < seats; p++) {
+            seat.handCounts[p] = game.handCount(p);
+            seat.done[p] = game.isDone(p);
+        }
 
         List<Seat.Pair> pairs = new ArrayList<>();
         for (Game.Slot slot : game.table()) {
@@ -105,14 +140,14 @@ public final class Table {
      */
     public String act(int player, Wire.Move move) {
         if (game.isOver()) return "Партия кончена.";
-        if (player != game.attacker() && player != game.defender()) {
+        if (player < 0 || player >= game.players()) {
             return "За этим столом нет такого места.";
         }
 
         switch (move.kind) {
             case Wire.Move.HIT:
                 if (move.card == null) return "Заход без карты.";
-                if (game.phase() != Game.PHASE_ATTACK || game.attacker() != player) {
+                if (game.phase() != Game.PHASE_ATTACK || game.mover() != player) {
                     return "Сейчас не твой ход.";
                 }
                 if (!game.attackOptions().contains(move.card)) return "Так зайти нельзя.";
@@ -129,7 +164,9 @@ public final class Table {
                 break;
 
             case Wire.Move.PASS:
-                if (game.attacker() != player) return "Сейчас не твой ход.";
+                if (game.phase() != Game.PHASE_ATTACK || game.mover() != player) {
+                    return "Сейчас не твой ход.";
+                }
                 if (!game.canPass()) return "Сейчас нельзя сказать «бито».";
                 game.pass();
                 round++;
@@ -142,6 +179,23 @@ public final class Table {
                 round++;
                 break;
 
+            case Wire.Move.SURRENDER:
+                // Сдаются в любой ход и по своей воле: столу остаётся только
+                // записать, кто вышел из игры, и объявить это всем.
+                game.surrender(player);
+                round++;
+                break;
+
+            case Wire.Move.RESTART:
+                // Раздать заново может только хозяин стола: колода у него.
+                if (player != 0) return "Раздать заново может только хозяин стола.";
+                game.start();
+                round = 1;
+                lastWho = -1;
+                lastKind = -1;
+                lastCard = null;
+                break;
+
             default:
                 return "Непонятный ход.";
         }
@@ -152,5 +206,10 @@ public final class Table {
         lastKind = move.kind;
         lastCard = move.card;
         return null;
+    }
+
+    /** Зерно этой партии: по нему видно, что стол тот самый. */
+    public long seed() {
+        return seed;
     }
 }

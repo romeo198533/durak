@@ -26,7 +26,7 @@ import java.util.List;
  */
 public final class Wire {
 
-    /** Ход одного игрока: зайти, отбиться, сказать «бито» или взять. */
+    /** Ход одного игрока: зайти, отбиться, сказать «бито», взять, сдаться. */
     public static final class Move {
 
         public static final int HIT = 0;
@@ -34,9 +34,21 @@ public final class Wire {
         public static final int PASS = 2;
         public static final int TAKE = 3;
 
+        /**
+         * Сдаться можно в любой ход, а не только в свой.
+         *
+         * Поэтому это единственный ход, который стол обязан уметь прочитать
+         * от любого места и в любой момент, — за него и пришлось завести
+         * чтение со всех каналов разом, а не с одного, чей черёд.
+         */
+        public static final int SURRENDER = 4;
+
+        /** Раздать заново. Ход хозяйский: колода лежит у того, кто открыл стол. */
+        public static final int RESTART = 5;
+
         public final int kind;
 
-        /** У «бито» и «беру» карты нет — null. */
+        /** У «бито», «беру» и «сдаюсь» карты нет — null. */
         public final Card card;
 
         private Move(int kind, Card card) {
@@ -59,6 +71,14 @@ public final class Wire {
         public static Move take() {
             return new Move(TAKE, null);
         }
+
+        public static Move surrender() {
+            return new Move(SURRENDER, null);
+        }
+
+        public static Move restart() {
+            return new Move(RESTART, null);
+        }
     }
 
     private static final char FIELD = ';';
@@ -72,6 +92,9 @@ public final class Wire {
     private static final String VIEW = "V";
     private static final String MOVE = "M";
     private static final String REPLY = "R";
+
+    /** Первое слово гостя: как его звать. */
+    private static final String NAME = "N";
 
     private Wire() {
     }
@@ -100,6 +123,9 @@ public final class Wire {
         field(out, "hand", join(cards(seat.hand)));
         field(out, "attacker", seat.attacker);
         field(out, "defender", seat.defender);
+        field(out, "mover", seat.mover);
+        field(out, "done", flags(seat.done));
+        field(out, "names", join(names(seat)));
         field(out, "phase", seat.phase);
         field(out, "loser", seat.loser);
         field(out, "draw", seat.draw ? 1 : 0);
@@ -130,6 +156,9 @@ public final class Wire {
             else if ("hand".equals(key)) seat.hand = cards(value);
             else if ("attacker".equals(key)) seat.attacker = number(value, key);
             else if ("defender".equals(key)) seat.defender = number(value, key);
+            else if ("mover".equals(key)) seat.mover = number(value, key);
+            else if ("done".equals(key)) seat.done = flags(value);
+            else if ("names".equals(key)) seat.names = names(value);
             else if ("phase".equals(key)) seat.phase = number(value, key);
             else if ("loser".equals(key)) seat.loser = number(value, key);
             else if ("draw".equals(key)) seat.draw = number(value, key) != 0;
@@ -160,6 +189,12 @@ public final class Wire {
             case Move.TAKE:
                 field(out, "do", "take");
                 break;
+            case Move.SURRENDER:
+                field(out, "do", "surrender");
+                break;
+            case Move.RESTART:
+                field(out, "do", "restart");
+                break;
             default:
                 throw new IllegalArgumentException("непонятный ход: " + move.kind);
         }
@@ -184,7 +219,43 @@ public final class Wire {
         if ("beat".equals(what)) return Move.beat(card);
         if ("pass".equals(what)) return Move.pass();
         if ("take".equals(what)) return Move.take();
+        if ("surrender".equals(what)) return Move.surrender();
+        if ("restart".equals(what)) return Move.restart();
         throw new IllegalArgumentException("непонятный ход: " + line);
+    }
+
+    // ----- первое слово гостя -----
+
+    /**
+     * Как звать игрока — первым словом, ещё до партии.
+     *
+     * Гость называет себя, едва канал открылся, и на этом всё: ответа на это
+     * слово не ждут, потому что это не ход, и отказывать в нём нечего. Стол
+     * разложит имя по местам и разошлёт его всем вместе со следующим видом —
+     * затем оно и нужно, чтобы назвать вслух чужую сдачу и чужой ход.
+     */
+    public static String encodeName(String name) {
+        StringBuilder out = new StringBuilder();
+        out.append(NAME);
+        field(out, "name", safe(name));
+        return out.toString();
+    }
+
+    /**
+     * Разобрать первое слово.
+     *
+     * @return имя или null, если это не имя: ход и ответ разбираются не здесь.
+     */
+    public static String decodeName(String line) {
+        if (line == null) return null;
+        String[] fields = line.split(String.valueOf(FIELD), -1);
+        if (fields.length == 0 || !NAME.equals(fields[0])) return null;
+        for (int i = 1; i < fields.length; i++) {
+            if (fields[i].indexOf(EQUALS) < 0) continue;
+            String[] pair = split(fields[i]);
+            if ("name".equals(pair[0])) return safe(pair[1]);
+        }
+        return "";
     }
 
     // ----- ответ главы стола -----
@@ -234,6 +305,39 @@ public final class Wire {
         return new Card(suit, rank);
     }
 
+    /**
+     * Имена за столом — по слову на место, как и всё остальное.
+     *
+     * Имя проходит через {@link #safe}: разделитель внутри имени развалил бы
+     * строку на полуслове прямо посреди партии, а человеку его не видно.
+     */
+    private static List<String> names(Seat seat) {
+        List<String> out = new ArrayList<>();
+        for (String name : seat.names) out.add(safe(name));
+        return out;
+    }
+
+    private static String[] names(String value) {
+        if (empty(value)) return new String[0];
+        String[] parts = value.split(LIST, -1);
+        String[] out = new String[parts.length];
+        for (int i = 0; i < parts.length; i++) out[i] = safe(parts[i]);
+        return out;
+    }
+
+    /** Имя без разделителей строки: их в имени быть не может. */
+    private static String safe(String value) {
+        if (value == null) return "";
+        StringBuilder out = new StringBuilder();
+        for (int i = 0; i < value.length() && out.length() < 20; i++) {
+            char symbol = value.charAt(i);
+            boolean divider = symbol == FIELD || symbol == EQUALS || symbol == ','
+                    || symbol == '\n' || symbol == '\r' || symbol == '\t';
+            out.append(divider ? ' ' : symbol);
+        }
+        return out.toString().trim();
+    }
+
     private static List<String> cards(List<Card> list) {
         List<String> out = new ArrayList<>();
         for (Card card : list) out.add(card(card));
@@ -275,6 +379,26 @@ public final class Wire {
             if (colon < 0) throw new IllegalArgumentException("не пара на столе: " + one);
             out.add(new Seat.Pair(card(one.substring(0, colon)), card(one.substring(colon + 1))));
         }
+        return out;
+    }
+
+    /**
+     * Кто вышел — по слову на место: «0,1,0».
+     *
+     * Номерами, а не списком вышедших, чтобы место в строке совпадало с местом
+     * за столом: у кого рука пуста, видно по одной букве, и разбирать нечего.
+     */
+    private static String flags(boolean[] values) {
+        List<String> out = new ArrayList<>();
+        for (boolean value : values) out.add(value ? "1" : "0");
+        return join(out);
+    }
+
+    private static boolean[] flags(String value) {
+        if (empty(value)) return new boolean[0];
+        String[] parts = value.split(LIST, -1);
+        boolean[] out = new boolean[parts.length];
+        for (int i = 0; i < parts.length; i++) out[i] = number(parts[i], "вышел") != 0;
         return out;
     }
 
