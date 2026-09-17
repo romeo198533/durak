@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Тема — только основа для диалогов. Цвета стола и карт ставятся кодом:
+     они настраиваются владельцем, и в разметке их не удержать. -->
 <resources>
-    <style name="Theme.Durak" parent="Theme.AppCompat.DayNight.NoActionBar" />
+    <style name="Theme.Durak" parent="@android:style/Theme.Material.Light.NoActionBar" />
 </resources>

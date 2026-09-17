@@ -1,11 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Интернет нужен только для проверки обновлений на GitHub. -->
+    <!-- Интернет нужен только для проверки обновления на GitHub. В саму игру
+         играют без сети: соперник — программа в этом же телефоне. -->
     <uses-permission android:name="android.permission.INTERNET" />
 
     <!-- Установка скачанного обновления: система спросит подтверждение. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!-- Без этого блока список установленных синтезаторов речи вернёт один
+         движок по умолчанию, и выбор синтезатора в настройках будет пустым.
+         Ошибка тихая: на вид просто нет выбора. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="application/vnd.android.package-archive" />
+        </intent>
+    </queries>
 
     <application
         android:allowBackup="true"
@@ -22,5 +38,27 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Партия не должна начинаться заново от поворота телефона: экраны
+             собираются кодом, и пересоздание сбрасывало бы раздачу. -->
+        <activity
+            android:name=".SetupActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:exported="false" />
+
+        <activity
+            android:name=".SettingsActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:exported="false" />
+
+        <activity
+            android:name=".SpeechActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:exported="false" />
+
+        <activity
+            android:name=".GameActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:exported="false" />
     </application>
 </manifest>

@@ -28,12 +28,24 @@ jobs:
         with:
           gradle-version: '8.7'
 
+      # Правила проверяются до сборки: движок партии не знает про Android, и
+      # 600 партий вхолостую ловят ошибку в правилах раньше, чем она доедет
+      # до телефона.
+      - name: Прогнать партии вхолостую
+        run: |
+          mkdir -p /tmp/engine
+          javac -d /tmp/engine app/src/main/java/ru/romeo198533/durak/*.java tools/EngineTest.java
+          java -cp /tmp/engine EngineTest
+
+      # Сборка release, а не debug: подпись ставится снаружи, своим ключом.
+      # Ключ, которым Android подписывает debug-сборки, генерируется заново
+      # каждый раз, и обновление поверх такой сборки не встало бы.
       - name: Собрать
-        run: gradle assembleDebug --no-daemon
+        run: gradle assembleRelease --no-daemon
 
       - name: Выложить файл сборки
         uses: actions/upload-artifact@v4
         with:
-          name: durak-debug
-          path: app/build/outputs/apk/debug/*.apk
+          name: durak-apk
+          path: app/build/outputs/apk/release/*.apk
           if-no-files-found: error

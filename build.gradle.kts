@@ -1,6 +1,8 @@
 // Корневой файл сборки: только объявление версий плагинов,
 // сами модули настраиваются в app/build.gradle.kts.
+//
+// Kotlin здесь не нужен: экраны написаны на Java, как в «Говорящем таймере»,
+// с которого взят голос. Меньше движущихся частей — меньше поводов не собраться.
 plugins {
     id("com.android.application") version "8.5.2" apply false
-    id("org.jetbrains.kotlin.android") version "1.9.24" apply false
 }
