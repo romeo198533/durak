@@ -17,12 +17,12 @@ import java.util.List;
  *
  * Раскладка повторяет настоящий стол, каким его нащупывают рукой: в самом низу —
  * свои карты, в самом верху — соперник, а посередине колода с козырем и по бокам
- * от неё «Начать заново» и «Сдаться». Над колодой две крупные кнопки — «Беру» и
+ * от неё «Начать заново» и «Беру». Над колодой две крупные кнопки — «Сдаться» и
  * «Бито»: обе на виду весь круг, потому что искать их в решительный момент
  * некогда, а «Бито» до поры объясняет, чего ещё не хватает.
  *
  * Пустого места за столом нет: свободную высоту делят между собой три полосы —
- * «Беру» с «Бито», ряд с колодой и полоса своих карт. Что выше и ниже них,
+ * «Сдаться» с «Бито», ряд с колодой и полоса своих карт. Что выше и ниже них,
  * занимает ровно столько, сколько нужно. Свои карты при этом стоят в самом низу,
  * где рука их и ищет.
  *
@@ -130,13 +130,13 @@ public class GameActivity extends Activity {
     /**
      * Собрать стол.
      *
-     * Свободную высоту делят три полосы — «Беру» с «Бито», ряд с колодой и
+     * Свободную высоту делят три полосы — «Сдаться» с «Бито», ряд с колодой и
      * полоса своих карт. Распорок здесь нет намеренно: распорка — это пустое
      * место, в котором палец не находит ничего, а Валера просил, чтобы за
      * столом был занят весь экран. Полосы с весом тянутся каждая на свою долю,
      * и пустоты не остаётся ни при каком размере экрана.
      *
-     * «Беру» и «Бито» — самая крупная доля: в решительный момент по ним бьют
+     * «Сдаться» и «Бито» — самая крупная доля: в решительный момент по ним бьют
      * не целясь, и промах стоит хода.
      */
     private void build() {
@@ -161,10 +161,13 @@ public class GameActivity extends Activity {
         tableText.setBackgroundColor(Palette.color(Prefs.cardColor(this)));
         root.addView(tableText, band(1f));
 
+        // «Сдаться» стоит слева в верхнем ряду, а «Беру» ушло вниз, в ряд с
+        // колодой: Валера просил поменять их местами. Кегль у кнопки от
+        // переезда не меняется — его задаёт ряд, а не сама кнопка.
         LinearLayout decisions = Skin.row(this);
-        takeButton = Skin.button(this, "Беру", 34);
-        takeButton.setOnClickListener(view -> tapTake());
-        decisions.addView(takeButton, fill(1f));
+        surrenderButton = Skin.button(this, "Сдаться", 34);
+        surrenderButton.setOnClickListener(view -> askSurrender());
+        decisions.addView(surrenderButton, fill(1f));
         passButton = Skin.button(this, "Бито", 34);
         passButton.setOnClickListener(view -> tapPass());
         decisions.addView(passButton, fill(1f));
@@ -180,9 +183,9 @@ public class GameActivity extends Activity {
         deckButton.setOnClickListener(view -> sayDeck());
         middle.addView(deckButton, fill(1.4f));
 
-        surrenderButton = Skin.button(this, "Сдаться", 20);
-        surrenderButton.setOnClickListener(view -> askSurrender());
-        middle.addView(surrenderButton, fill(1f));
+        takeButton = Skin.button(this, "Беру", 20);
+        takeButton.setOnClickListener(view -> tapTake());
+        middle.addView(takeButton, fill(1f));
 
         root.addView(middle, band(0.9f));
 

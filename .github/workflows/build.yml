@@ -36,6 +36,12 @@ jobs:
       # Потом сетевая партия: то же самое, но каждый ход едет строкой через
       # Wire, и каждый игрок играет по одному только своему виду места.
       #
+      # И третий заход — та же партия поверх каналов связи: глава стола в одном
+      # потоке, игроки в своих, каждый ждёт вид и шлёт ход. Канал при этом не
+      # радио, а общая память, — но партия о том не знает и ведёт себя ровно
+      # так же, как поведёт по Блютусу. Здесь ловится то, чего на телефонах не
+      # поймать: замершая или разошедшаяся партия.
+      #
       # Файлы перечислены поимённо, а не звёздочкой: рядом лежат экраны, и без
       # Android их не собрать. Список короткий и меняется редко.
       - name: Прогнать партии вхолостую
@@ -50,6 +56,10 @@ jobs:
             app/src/main/java/ru/romeo198533/durak/Seat.java \
             app/src/main/java/ru/romeo198533/durak/Wire.java \
             app/src/main/java/ru/romeo198533/durak/Table.java \
+            app/src/main/java/ru/romeo198533/durak/Link.java \
+            app/src/main/java/ru/romeo198533/durak/MemoryLink.java \
+            app/src/main/java/ru/romeo198533/durak/Host.java \
+            app/src/main/java/ru/romeo198533/durak/Guest.java \
             tools/EngineTest.java \
             tools/NetTest.java
           java -cp /tmp/engine EngineTest
