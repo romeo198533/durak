@@ -130,10 +130,13 @@ public class GameActivity extends Activity {
                 Skin.dp(this, 4), Skin.dp(this, 12));
         root.addView(foeButton, band(0f));
 
-        // Стол — обычная надпись, а не кнопка: при касании диктор читает её как
-        // есть, и подсказки «нажми, чтобы услышать ещё раз» к ней не нужно.
-        tableText = Skin.text(this, "", 17);
-        root.addView(tableText, band(0f));
+        // Поле, где лежат карты хода и отбоя. Не надпись в уголке, а своя полоса
+        // во всю ширину и с весом: Валера просил сделать поле крупнее и отдать
+        // ему место, а кнопки от этого сами сдвигаются чуть ниже. Фон — как у
+        // карт, чтобы поле было видно и слабовидящему.
+        tableText = Skin.text(this, "", 22);
+        tableText.setBackgroundColor(Palette.color(Prefs.cardColor(this)));
+        root.addView(tableText, band(1f));
 
         LinearLayout decisions = Skin.row(this);
         takeButton = Skin.button(this, "Беру", 34);
@@ -277,18 +280,22 @@ public class GameActivity extends Activity {
         }
     }
 
-    /** Что человеку делать прямо сейчас. */
+    /**
+     * Что человеку делать прямо сейчас.
+     *
+     * Подсказка называет только то, чего не слышно из карт: чей ход и какую
+     * карту бить. Ни «бей или бери», ни «подкидывай или говори бито» здесь нет —
+     * Валера знает правила, и это для него лишнее слово.
+     */
     private void promptHuman() {
         String hint;
         if (game.phase() == Game.PHASE_DEFEND && game.defender() == HUMAN) {
             Game.Slot open = game.unbeaten();
-            hint = open == null
-                    ? "Отбивайся."
-                    : "Отбивайся: бить " + open.attack.name() + ". Или бери.";
+            hint = open == null ? "Отбивайся." : "Отбивайся: " + open.attack.name() + ".";
         } else if (game.table().isEmpty()) {
-            hint = "Твой ход. Зайди любой картой.";
+            hint = "Твой ход.";
         } else {
-            hint = "Подкидывай или говори бито.";
+            hint = "Подкидывай.";
         }
         turn(hint);
     }

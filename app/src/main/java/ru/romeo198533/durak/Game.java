@@ -168,6 +168,14 @@ public final class Game {
      * Рука в том порядке, в каком её читают вслух: сначала обычные масти по
      * старшинству, козыри в конце — их видно сразу, и искать их не надо.
      */
+    /**
+     * Рука по порядку: от мелкого к крупному, слева направо.
+     *
+     * Сначала просто достоинство, а не масть: «шесть, семь, восемь» — так руку
+     * и держат, и так её читают вслух. Козыри в конце: козырь бьёт любую
+     * некозырную карту, значит он и старше всех — а ищут его отдельно, и с
+     * конца списка он находится сразу. Масть решает только между равными.
+     */
     public List<Card> handSorted(int player) {
         List<Card> out = new ArrayList<>(hands.get(player));
         Collections.sort(out, new Comparator<Card>() {
@@ -176,8 +184,8 @@ public final class Game {
                 boolean ta = a.isTrump(trump);
                 boolean tb = b.isTrump(trump);
                 if (ta != tb) return ta ? 1 : -1;
-                if (a.suit != b.suit) return Integer.compare(a.suit, b.suit);
-                return Integer.compare(a.rank, b.rank);
+                if (a.rank != b.rank) return Integer.compare(a.rank, b.rank);
+                return Integer.compare(a.suit, b.suit);
             }
         });
         return out;
