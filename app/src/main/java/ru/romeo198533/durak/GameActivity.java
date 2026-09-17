@@ -39,6 +39,19 @@ public class GameActivity extends Activity {
     /** Пауза перед ходом соперника: чтобы его фраза не наезжала на свою. */
     private static final long FOE_PAUSE_MS = 1200L;
 
+    /**
+     * Уже этой карта не станет.
+     *
+     * 26dp — это шаг в 30dp с зазором: палец шириной около сантиметра ещё
+     * различает соседние карты на ощупь. Тринадцать карт — самая большая рука,
+     * какая бывает после крупной взятки, — при таком пределе влезают целиком.
+     * Дальше ужимать уже нельзя: по карте не попасть, и вернётся прокрутка.
+     */
+    private static final int MIN_CARD_DP = 26;
+
+    /** Мелче этого надпись на карте не читается. */
+    private static final int MIN_CARD_SP = 14;
+
     private final Handler handler = new Handler(Looper.getMainLooper());
 
     private Game game;
@@ -218,8 +231,10 @@ public class GameActivity extends Activity {
         trumpName = open == null ? Cards.suitName(game.trump()) : open.name();
 
         refresh();
+        // Рука вслух не перечисляется: её и так смотрят по картам, а список
+        // шести карт подряд только отодвигает партию и мешает слушать.
         announce("Раздача. Козырь — " + trumpName + ". У тебя "
-                + Cards.count(game.handCount(HUMAN)) + ": " + Cards.list(game.handSorted(HUMAN)) + ".");
+                + Cards.count(game.handCount(HUMAN)) + ".");
         advance();
     }
 
@@ -270,7 +285,10 @@ public class GameActivity extends Activity {
             Card card = bot.attack(game);
             if (card == null && game.canPass()) {
                 game.pass();
-                announce("Соперник: бито.");
+                // Без «соперник»: круг кончил он, и это уже слышно — карту
+                // перед этим называли его голосом. Дальше идёт «твой ход», и
+                // вместе выходит ровно «бито, твой ход».
+                announce("Бито.");
                 return;
             }
             if (card != null) {
@@ -386,10 +404,20 @@ public class GameActivity extends Activity {
     // ----- что говорят кнопки -----
 
     private void sayDeck() {
-        String cards = game.deckCount() == 0
-                ? "Колода пуста."
-                : "В колоде " + Cards.count(game.deckCount()) + ".";
-        voice.say(cards + " Козырь — " + trumpName + ".");
+        voice.say(deckWords() + " Козырь — " + trumpName + ".");
+    }
+
+    /**
+     * Колода словами: «колода, 24 карты».
+     *
+     * Без «в ней»: считают карты в колоде, а не что-то внутри неё, и лишнее
+     * слово тут только удлиняет фразу. Одними и теми же словами говорит и
+     * нажатие, и диктор при касании — иначе одна и та же колода звучала бы
+     * по-разному в зависимости от того, чем до неё дотронулись.
+     */
+    private String deckWords() {
+        if (game.deckCount() == 0) return "Колода пуста.";
+        return "Колода, " + Cards.count(game.deckCount()) + ".";
     }
 
     /**
@@ -436,8 +464,7 @@ public class GameActivity extends Activity {
         plain(deckButton,
                 game.deckCount() == 0 ? "Колода\nпуста" : "Колода\n" + Cards.count(game.deckCount()));
 
-        describe(deckButton, "Колода. В ней " + Cards.count(game.deckCount())
-                + ", козырь — " + trumpName);
+        describe(deckButton, deckWords() + " Козырь — " + trumpName);
 
         // У «Бито» описания нет намеренно, и меняться на ходу оно не должно:
         // диктор читает изменившуюся подпись той кнопки, на которой стоит, — и
@@ -473,6 +500,12 @@ public class GameActivity extends Activity {
      * Ширина карты считается от кегля, а не берётся от веса: внутри полосы,
      * которая шире экрана, вес делить не от чего. Двузначное достоинство при
      * самом крупном кегле должно оставаться целым.
+     *
+     * Но от кегля — только пока карты помещаются. Взятка на десять карт в
+     * экран не влезала: половина руки оставалась за краем, и до неё ещё надо
+     * было догадаться прокрутить. Поэтому карт на руке больше — карта мельче,
+     * и вся рука остаётся на виду разом. Вместе с шириной уменьшается и
+     * надпись: иначе достоинство обрезалось бы по краям карты.
      */
     private void showHand() {
         List<Card> cards = game.handSorted(HUMAN);
@@ -482,7 +515,8 @@ public class GameActivity extends Activity {
         // после каждого хода соперника терял бы карту, на которой стоял, и
         // возвращался бы в начало полосы — а на карту ещё нужно попасть.
         // Цвета тоже в ключе: их меняют в настройках, и вернувшись за стол,
-        // карты должны быть уже перекрашены.
+        // карты должны быть уже перекрашены. Число карт в ключе есть — оно
+        // в списке, — значит и ширина пересчитается сама.
         String key = sp + "|" + Prefs.cardColor(this) + "|" + Prefs.suitColor(this)
                 + "|" + Prefs.rankColor(this) + "|" + Cards.list(cards);
         if (key.equals(handKey)) return;
@@ -495,9 +529,16 @@ public class GameActivity extends Activity {
             return;
         }
 
-        int width = Skin.dp(this, Math.max(Skin.TOUCH_DP, Math.round(sp * 1.6f)));
+        // Сколько остаётся на карту, если разложить всю руку по ширине
+        // экрана: поля корня по бокам и зазоры между картами — врозь.
+        int natural = Skin.dp(this, Math.max(Skin.TOUCH_DP, Math.round(sp * 1.6f)));
+        int screen = getResources().getDisplayMetrics().widthPixels;
+        int room = screen - Skin.dp(this, 16) - Skin.dp(this, 4) * cards.size();
+        int width = Math.min(natural, Math.max(Skin.dp(this, MIN_CARD_DP), room / cards.size()));
+        int sizeSp = Math.min(sp, fitSp(width));
+
         for (Card card : cards) {
-            Button button = Skin.card(this, card, sp, game.trump());
+            Button button = Skin.card(this, card, sizeSp, game.trump());
             button.setOnClickListener(view -> tapCard(card));
             // Во всю высоту полосы: полоса растянута до самого низа экрана, и
             // карта должна заполнять её целиком, а не висеть в ней островком.
@@ -507,6 +548,20 @@ public class GameActivity extends Activity {
                     Skin.dp(this, 2), Skin.dp(this, 2));
             handBox.addView(button, params);
         }
+    }
+
+    /**
+     * Самый крупный кегль, при котором надпись ещё помещается в карту.
+     *
+     * В достоинстве бывает две цифры («10»), и они шире всего остального на
+     * карте. Отсюда и счёт: две цифры — примерно 1,15 кегля, плюс поля по
+     * бокам. Ниже предела не опускаемся: совсем мелкую карту и на ощупь не
+     * найти, и прочитать нельзя.
+     */
+    private int fitSp(int widthPx) {
+        float density = getResources().getDisplayMetrics().density;
+        int sp = Math.round((widthPx / density - 8f) / 1.15f);
+        return Math.max(MIN_CARD_SP, sp);
     }
 
     /** Размер по содержимому: для полосы, которая сама шире экрана. */
