@@ -31,10 +31,19 @@ jobs:
       # Правила проверяются до сборки: движок партии не знает про Android, и
       # 600 партий вхолостую ловят ошибку в правилах раньше, чем она доедет
       # до телефона.
+      #
+      # Файлы перечислены поимённо, а не звёздочкой: рядом лежат экраны, и без
+      # Android их не собрать. Список короткий и меняется редко.
       - name: Прогнать партии вхолостую
         run: |
           mkdir -p /tmp/engine
-          javac -d /tmp/engine app/src/main/java/ru/romeo198533/durak/*.java tools/EngineTest.java
+          javac -d /tmp/engine \
+            app/src/main/java/ru/romeo198533/durak/Card.java \
+            app/src/main/java/ru/romeo198533/durak/Cards.java \
+            app/src/main/java/ru/romeo198533/durak/Ru.java \
+            app/src/main/java/ru/romeo198533/durak/Game.java \
+            app/src/main/java/ru/romeo198533/durak/Bot.java \
+            tools/EngineTest.java
           java -cp /tmp/engine EngineTest
 
       # Сборка release, а не debug: подпись ставится снаружи, своим ключом.
